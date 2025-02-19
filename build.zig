@@ -11,11 +11,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // const spoon = b.dependency("spoon", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // exe.root_module.addImport("spoon", spoon.module("spoon"));
+    const tuile = b.dependency("tuile", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("tuile", tuile.module("tuile"));
 
     b.installArtifact(exe);
 
