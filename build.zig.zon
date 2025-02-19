@@ -1,9 +1,0 @@
-.{
-    .name = "vimput",
-    .version = "0.0.1",
-    .paths = .{""},
-    .dependencies = .{ .tuile = .{
-        .url = "https://github.com/akarpovskii/tuile/archive/refs/tags/v0.1.3.tar.gz",
-        .hash = "122097cec88e4270a2f14d1bcb85120cbe9a754c42faf5ad5a909c4f1d972e1c1f6c",
-    } },
-}
