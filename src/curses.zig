@@ -1,11 +1,12 @@
 const std = @import("std");
-const c = @cImport({
+
+pub const c = @cImport({
     @cInclude("curses.h");
 });
 
 const Error = error.CursesError;
 
-const Key = c_int;
+const Key = c_uint;
 
 fn asError(res: c_int) !c_int {
     if (res == c.ERR) {
@@ -19,7 +20,11 @@ pub const Window = struct {
     allocator: std.mem.Allocator,
 
     pub fn getch(self: Window) !Key {
-        return asError(c.wgetch(self.window));
+        return @intCast(try asError(c.wgetch(self.window)));
+    }
+
+    pub fn waddch(self: Window, char: c.chtype) !void {
+        _ = try asError(c.waddch(self.window, char));
     }
 };
 
@@ -32,4 +37,12 @@ pub fn initscr(allocator: std.mem.Allocator) !Window {
 
 pub fn endwin() !void {
     _ = try asError(c.endwin());
+}
+
+pub fn noecho() !void {
+    _ = try asError(c.noecho());
+}
+
+pub fn clear() !void {
+    _ = try asError(c.clear());
 }
