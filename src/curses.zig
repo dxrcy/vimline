@@ -26,6 +26,10 @@ pub const Window = struct {
     pub fn waddch(self: Window, char: c.chtype) !void {
         _ = try asError(c.waddch(self.window, char));
     }
+
+    pub fn keypad(self: Window, value: bool) !void {
+        _ = try asError(c.keypad(self.window, value));
+    }
 };
 
 pub fn initscr(allocator: std.mem.Allocator) !Window {
@@ -39,10 +43,10 @@ pub fn endwin() !void {
     _ = try asError(c.endwin());
 }
 
-pub fn noecho() !void {
-    _ = try asError(c.noecho());
-}
-
 pub fn clear() !void {
     _ = try asError(c.clear());
+}
+
+pub fn noecho() !void {
+    _ = try asError(c.noecho());
 }
