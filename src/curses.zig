@@ -17,7 +17,6 @@ fn asError(res: c_int) !c_int {
 
 pub const Window = struct {
     window: *c.WINDOW,
-    allocator: std.mem.Allocator,
 
     pub fn getch(self: Window) !Key {
         return @intCast(try asError(c.wgetch(self.window)));
@@ -32,10 +31,9 @@ pub const Window = struct {
     }
 };
 
-pub fn initscr(allocator: std.mem.Allocator) !Window {
+pub fn initscr() !Window {
     return Window{
         .window = c.initscr() orelse return Error,
-        .allocator = allocator,
     };
 }
 
@@ -49,4 +47,8 @@ pub fn clear() !void {
 
 pub fn noecho() !void {
     _ = try asError(c.noecho());
+}
+
+pub fn move(y: u16, x: u16) !void {
+    _ = try asError(c.move(y, x));
 }

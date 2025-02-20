@@ -17,35 +17,50 @@ const VimMode = enum {
 
 const Snap = struct {
     buffer: [MAX_INPUT]u8,
-    length: usize,
-    cursor: usize,
+    length: u32,
+    cursor: u32,
+};
+
+const InputBox = struct {
+    x: u16,
+    y: u16,
+    width: u32,
 };
 
 pub fn main() !void {
-    const allocator = std.heap.c_allocator;
-
-    var state: State = .{
+    var state = State{
         .mode = .Normal,
-        .snap = .{
+        .snap = Snap{
             .buffer = undefined,
             .length = 0,
             .cursor = 0,
         },
     };
 
-    @memcpy(state.snap.buffer[0..3], "abc");
-    state.snap.length = 3;
+    @memcpy(state.snap.buffer[0..6], "abcdef");
+    state.snap.length = 6;
+    state.snap.cursor = 6;
 
-    const stdscr = try curses.initscr(allocator);
+    const stdscr = try curses.initscr();
 
     try curses.noecho();
     try stdscr.keypad(true);
+
+    const input_box = InputBox{
+        .x = 2,
+        .y = 5,
+        .width = 20,
+    };
 
     var key: c_uint = 0;
 
     while (true) {
         try curses.clear();
 
+        try curses.move(input_box.y + 1, @intCast(@as(usize, input_box.x) + state.snap.cursor));
+        try stdscr.waddch('^');
+
+        try curses.move(input_box.y, input_box.x);
         for (0..state.snap.length) |i| {
             try stdscr.waddch(state.snap.buffer[i]);
         }
@@ -55,6 +70,9 @@ pub fn main() !void {
         const keys = struct {
             const ESCAPE = 0x1b;
             const BACKSPACE = 0x107;
+
+            const ARROW_LEFT = 0x104;
+            const ARROW_RIGHT = 0x105;
 
             const PRINTABLE_START = 0x20;
             const PRINTABLE_END = 0x7e;
@@ -66,14 +84,34 @@ pub fn main() !void {
             },
 
             keys.BACKSPACE => {
-                if (state.snap.length > 0) {
+                if (state.snap.cursor > 0 and state.snap.length > 0) {
+                    for (state.snap.cursor..state.snap.length) |i| {
+                        state.snap.buffer[i - 1] = state.snap.buffer[i];
+                    }
+                    state.snap.cursor -= 1;
                     state.snap.length -= 1;
+                }
+            },
+
+            keys.ARROW_LEFT => {
+                if (state.snap.cursor > 0) {
+                    state.snap.cursor -= 1;
+                }
+            },
+            keys.ARROW_RIGHT => {
+                if (state.snap.cursor < state.snap.length) {
+                    state.snap.cursor += 1;
                 }
             },
 
             keys.PRINTABLE_START...keys.PRINTABLE_END => {
                 if (state.snap.length < MAX_INPUT) {
-                    state.snap.buffer[state.snap.length] = @intCast(key);
+                    var i = state.snap.length;
+                    while (i > state.snap.cursor) : (i -= 1) {
+                        state.snap.buffer[i] = state.snap.buffer[i - 1];
+                    }
+                    state.snap.buffer[state.snap.cursor] = @intCast(key);
+                    state.snap.cursor += 1;
                     state.snap.length += 1;
                 }
             },
