@@ -194,6 +194,17 @@ const Ui = struct {
                         state.mode = .Replace;
                     },
 
+                    'x' => {
+                        if (state.snap.cursor > 0 and state.snap.length > 0) {
+                            for (state.snap.cursor..state.snap.length) |i| {
+                                state.snap.buffer[i - 1] = state.snap.buffer[i];
+                            }
+                            state.snap.cursor -= 1;
+                            state.snap.length -= 1;
+                            state.snap.updateOffsetLeft();
+                        }
+                    },
+
                     // TODO: v
                     // TODO: V
                     // TODO: a
@@ -209,7 +220,6 @@ const Ui = struct {
                     // TODO: 0
                     // TODO: $
                     // TODO: D
-                    // TODO: x
                     // TODO: 0
                     // TODO: u
                     // TODO: <C-r>
