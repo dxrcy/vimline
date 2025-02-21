@@ -114,7 +114,7 @@ const Ui = struct {
 
         try window.move(
             input_box.y + 2,
-            @intCast(@as(usize, input_box.x) + state.snap.cursor - state.snap.offset + 1),
+            @intCast(subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1),
         );
         try window.addch('^');
 
@@ -126,7 +126,7 @@ const Ui = struct {
 
         try window.move(
             input_box.y + 1,
-            @intCast(@as(usize, input_box.x) + state.snap.cursor - state.snap.offset + 1),
+            @intCast(subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1),
         );
 
         const key = try window.getch();
@@ -159,21 +159,20 @@ const Ui = struct {
                             }
                             state.snap.cursor -= 1;
                             state.snap.length -= 1;
-
-                            if (state.snap.offset > 0 and state.snap.cursor - state.snap.offset < 2) {
-                                state.snap.offset -= 1;
-                            }
+                            updateOffsetLeft(&state.snap);
                         }
                     },
 
                     keys.ARROW_LEFT => {
                         if (state.snap.cursor > 0) {
                             state.snap.cursor -= 1;
+                            updateOffsetLeft(&state.snap);
                         }
                     },
                     keys.ARROW_RIGHT => {
                         if (state.snap.cursor < state.snap.length) {
                             state.snap.cursor += 1;
+                            updateOffsetRight(&state.snap);
                         }
                     },
 
@@ -186,10 +185,7 @@ const Ui = struct {
                             state.snap.buffer[state.snap.cursor] = @intCast(key);
                             state.snap.cursor += 1;
                             state.snap.length += 1;
-
-                            if (state.snap.cursor - state.snap.offset > input_box.width - 2) {
-                                state.snap.offset += 1;
-                            }
+                            updateOffsetRight(&state.snap);
                         }
                     },
 
@@ -221,7 +217,32 @@ const Ui = struct {
     }
 };
 
-fn subsat(rhs: anytype, lhs: anytype) @TypeOf(lhs) {
+const padding = struct {
+    const LEFT = 5;
+    const RIGHT_FULL = 3;
+    const RIGHT_EMPTY = 1;
+};
+
+fn updateOffsetLeft(snap: *Snap) void {
+    if (snap.cursor < snap.offset + padding.LEFT) {
+        snap.offset = subsat(snap.cursor, padding.LEFT);
+    }
+}
+
+fn updateOffsetRight(snap: *Snap) void {
+    const width = Ui.input_box.width;
+
+    const padding_right: u32 = if (snap.cursor + 1 >= snap.length)
+        padding.RIGHT_EMPTY
+    else
+        padding.RIGHT_FULL;
+
+    if (snap.cursor + padding_right > snap.offset + width) {
+        snap.offset = subsat(snap.cursor + padding_right, width);
+    }
+}
+
+fn subsat(lhs: anytype, rhs: anytype) @TypeOf(lhs) {
     if (rhs >= lhs) {
         return 0;
     }
