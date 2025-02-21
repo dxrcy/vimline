@@ -31,6 +31,8 @@ const keys = struct {
     const ARROW_LEFT = 0x104;
     const ARROW_RIGHT = 0x105;
 
+    const RETURN = 0x0a;
+
     const PRINTABLE_START = 0x20;
     const PRINTABLE_END = 0x7e;
 };
@@ -116,11 +118,9 @@ const Ui = struct {
             try window.addch(state.snap.buffer[index]);
         }
 
-        try window.move(
-            input_box.y + 2,
-            @intCast(subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1),
+        const cursor_x: u16 = @intCast(
+            subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1,
         );
-        try window.addch('^');
 
         if (state.mode == .Insert) {
             curses.setCursor(.SteadyBar);
@@ -130,10 +130,7 @@ const Ui = struct {
             curses.setCursor(.SteadyBlock);
         }
 
-        try window.move(
-            input_box.y + 1,
-            @intCast(subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1),
-        );
+        try window.move(input_box.y + 1, cursor_x);
 
         const key = try window.getch();
         switch (state.mode) {
@@ -141,6 +138,12 @@ const Ui = struct {
                 switch (key) {
                     'q' => {
                         try curses.endwin();
+                        std.process.exit(0);
+                    },
+
+                    keys.RETURN => {
+                        try curses.endwin();
+                        saveInput(state);
                         std.process.exit(0);
                     },
 
@@ -165,8 +168,6 @@ const Ui = struct {
                         state.mode = .Replace;
                     },
 
-                    // TODO: Enter
-                    // TODO: r
                     // TODO: v
                     // TODO: V
                     // TODO: a
@@ -195,6 +196,12 @@ const Ui = struct {
                 switch (key) {
                     keys.ESCAPE => {
                         state.mode = .Normal;
+                    },
+
+                    keys.RETURN => {
+                        try curses.endwin();
+                        saveInput(state);
+                        std.process.exit(0);
                     },
 
                     keys.BACKSPACE => {
@@ -234,24 +241,20 @@ const Ui = struct {
                         }
                     },
 
-                    // TODO: Enter
-
                     else => {},
                 }
             },
 
             .Replace => {
                 switch (key) {
-                    keys.ESCAPE => {
-                        state.mode = .Normal;
-                    },
-
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
                         state.snap.buffer[state.snap.cursor] = @intCast(key);
                         state.mode = .Normal;
                     },
 
-                    else => {},
+                    else => {
+                        state.mode = .Normal;
+                    },
                 }
             },
 
@@ -282,6 +285,12 @@ const Ui = struct {
         try window.addch('+');
     }
 };
+
+fn saveInput(state: *const State) void {
+    const input = state.snap.buffer[0..state.snap.length];
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("{s}\n", .{input}) catch {};
+}
 
 const padding = struct {
     const LEFT = 5;
