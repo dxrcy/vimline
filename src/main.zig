@@ -13,6 +13,8 @@ const State = struct {
 const VimMode = enum {
     Normal,
     Insert,
+    Replace,
+    Visual,
 };
 
 const Snap = struct {
@@ -96,8 +98,10 @@ const Ui = struct {
 
         try window.move(size.rows - 1, 0);
         const mode = switch (state.mode) {
-            VimMode.Normal => "NORMAL",
-            VimMode.Insert => "INSERT",
+            VimMode.Normal => "NORMAL ",
+            VimMode.Insert => "INSERT ",
+            VimMode.Replace => "REPLACE",
+            VimMode.Visual => "VISUAL ",
         };
         try window.addstr(mode);
 
@@ -120,6 +124,8 @@ const Ui = struct {
 
         if (state.mode == .Insert) {
             curses.setCursor(.SteadyBar);
+        } else if (state.mode == .Replace) {
+            curses.setCursor(.SteadyUnderline);
         } else {
             curses.setCursor(.SteadyBlock);
         }
@@ -131,22 +137,61 @@ const Ui = struct {
 
         const key = try window.getch();
         switch (state.mode) {
-            VimMode.Normal => {
+            .Normal => {
                 switch (key) {
                     'q' => {
                         try curses.endwin();
                         std.process.exit(0);
                     },
 
+                    'h', keys.ARROW_LEFT => {
+                        if (state.snap.cursor > 0) {
+                            state.snap.cursor -= 1;
+                            updateOffsetLeft(&state.snap);
+                        }
+                    },
+                    'l', keys.ARROW_RIGHT => {
+                        if (state.snap.cursor < state.snap.length) {
+                            state.snap.cursor += 1;
+                            updateOffsetRight(&state.snap);
+                        }
+                    },
+
                     'i' => {
                         state.mode = .Insert;
                     },
+
+                    'r' => {
+                        state.mode = .Replace;
+                    },
+
+                    // TODO: Enter
+                    // TODO: r
+                    // TODO: v
+                    // TODO: V
+                    // TODO: a
+                    // TODO: I
+                    // TODO: A
+                    // TODO: w
+                    // TODO: e
+                    // TODO: b
+                    // TODO: W
+                    // TODO: E
+                    // TODO: B
+                    // TODO: ^, _
+                    // TODO: 0
+                    // TODO: $
+                    // TODO: D
+                    // TODO: x
+                    // TODO: 0
+                    // TODO: u
+                    // TODO: <C-r>
 
                     else => {},
                 }
             },
 
-            VimMode.Insert => {
+            .Insert => {
                 switch (key) {
                     keys.ESCAPE => {
                         state.mode = .Normal;
@@ -189,8 +234,29 @@ const Ui = struct {
                         }
                     },
 
+                    // TODO: Enter
+
                     else => {},
                 }
+            },
+
+            .Replace => {
+                switch (key) {
+                    keys.ESCAPE => {
+                        state.mode = .Normal;
+                    },
+
+                    keys.PRINTABLE_START...keys.PRINTABLE_END => {
+                        state.snap.buffer[state.snap.cursor] = @intCast(key);
+                        state.mode = .Normal;
+                    },
+
+                    else => {},
+                }
+            },
+
+            .Visual => {
+                // TODO
             },
         }
     }

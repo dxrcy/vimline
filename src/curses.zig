@@ -82,6 +82,7 @@ pub fn set_escdelay(delay: c_int) !void {
 pub const CursorStyle = enum(u8) {
     SteadyBlock = 2,
     SteadyBar = 6,
+    SteadyUnderline = 4,
 };
 
 pub fn setCursor(cursor: CursorStyle) void {
