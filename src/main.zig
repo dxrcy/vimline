@@ -118,10 +118,6 @@ const Ui = struct {
             try window.addch(state.snap.buffer[index]);
         }
 
-        const cursor_x: u16 = @intCast(
-            subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1,
-        );
-
         if (state.mode == .Insert) {
             curses.setCursor(.SteadyBar);
         } else if (state.mode == .Replace) {
@@ -130,6 +126,9 @@ const Ui = struct {
             curses.setCursor(.SteadyBlock);
         }
 
+        const cursor_x: u16 = @intCast(
+            subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1,
+        );
         try window.move(input_box.y + 1, cursor_x);
 
         const key = try window.getch();
@@ -268,21 +267,23 @@ const Ui = struct {
         const window = self.window;
 
         try window.move(input_box.y, input_box.x);
-        try window.addch('+');
+        try window.addch(curses.acs.ULCORNER);
         for (0..input_box.width) |_| {
-            try window.addch('-');
+            try window.addch(curses.acs.HLINE);
         }
-        try window.addch('+');
+        try window.addch(curses.acs.URCORNER);
+
         try window.move(input_box.y + 1, input_box.x);
-        try window.addch('|');
+        try window.addch(curses.acs.VLINE);
         try window.move(input_box.y + 1, input_box.x + input_box.width + 1);
-        try window.addch('|');
+        try window.addch(curses.acs.VLINE);
+
         try window.move(input_box.y + 2, input_box.x);
-        try window.addch('+');
+        try window.addch(curses.acs.LLCORNER);
         for (0..input_box.width) |_| {
-            try window.addch('-');
+            try window.addch(curses.acs.HLINE);
         }
-        try window.addch('+');
+        try window.addch(curses.acs.LRCORNER);
     }
 };
 

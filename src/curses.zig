@@ -89,3 +89,12 @@ pub fn setCursor(cursor: CursorStyle) void {
     const stdout = std.io.getStdOut().writer();
     stdout.print("\x1b[{} q", .{@intFromEnum(cursor)}) catch {};
 }
+
+pub const acs = struct {
+    pub const LRCORNER = 0x0040006a;
+    pub const URCORNER = 0x0040006b;
+    pub const ULCORNER = 0x0040006c;
+    pub const LLCORNER = 0x0040006d;
+    pub const HLINE = 0x00400071;
+    pub const VLINE = 0x00400078;
+};
