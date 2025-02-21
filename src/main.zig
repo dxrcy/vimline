@@ -2,8 +2,22 @@ const std = @import("std");
 const print = std.debug.print;
 
 const curses = @import("./curses.zig");
+const acs = curses.acs;
+const ScreenSize = curses.ScreenSize;
+const Window = curses.Window;
 
 const MAX_INPUT = 200;
+
+const box = struct {
+    const MAX_WIDTH = 70;
+    const MARGIN = 2;
+};
+
+const padding = struct {
+    const LEFT = 5;
+    const RIGHT_FULL = 3;
+    const RIGHT_EMPTY = 1;
+};
 
 const State = struct {
     mode: VimMode,
@@ -61,7 +75,7 @@ pub fn main() !void {
 }
 
 const Ui = struct {
-    window: curses.Window,
+    window: Window,
 
     const InputBox = struct {
         x: u16,
@@ -97,6 +111,7 @@ const Ui = struct {
         try window.clear();
 
         const size = try window.getScreenSize();
+        updateInputBox(size);
 
         try window.move(size.rows - 1, 0);
         const mode = switch (state.mode) {
@@ -267,37 +282,37 @@ const Ui = struct {
         const window = self.window;
 
         try window.move(input_box.y, input_box.x);
-        try window.addch(curses.acs.ULCORNER);
+        try window.addch(acs.ULCORNER);
         for (0..input_box.width) |_| {
-            try window.addch(curses.acs.HLINE);
+            try window.addch(acs.HLINE);
         }
-        try window.addch(curses.acs.URCORNER);
+        try window.addch(acs.URCORNER);
 
         try window.move(input_box.y + 1, input_box.x);
-        try window.addch(curses.acs.VLINE);
+        try window.addch(acs.VLINE);
         try window.move(input_box.y + 1, input_box.x + input_box.width + 1);
-        try window.addch(curses.acs.VLINE);
+        try window.addch(acs.VLINE);
 
         try window.move(input_box.y + 2, input_box.x);
-        try window.addch(curses.acs.LLCORNER);
+        try window.addch(acs.LLCORNER);
         for (0..input_box.width) |_| {
-            try window.addch(curses.acs.HLINE);
+            try window.addch(acs.HLINE);
         }
-        try window.addch(curses.acs.LRCORNER);
+        try window.addch(acs.LRCORNER);
     }
 };
+
+fn updateInputBox(size: ScreenSize) void {
+    Ui.input_box.width = min(size.cols - box.MARGIN * 2 - 2, box.MAX_WIDTH);
+    Ui.input_box.x = (size.cols - Ui.input_box.width) / 2 - 1;
+    Ui.input_box.y = size.rows / 2 - 1;
+}
 
 fn saveInput(state: *const State) void {
     const input = state.snap.buffer[0..state.snap.length];
     const stdout = std.io.getStdOut().writer();
     stdout.print("{s}\n", .{input}) catch {};
 }
-
-const padding = struct {
-    const LEFT = 5;
-    const RIGHT_FULL = 3;
-    const RIGHT_EMPTY = 1;
-};
 
 fn updateOffsetLeft(snap: *Snap) void {
     if (snap.cursor < snap.offset + padding.LEFT) {
@@ -323,4 +338,11 @@ fn subsat(lhs: anytype, rhs: anytype) @TypeOf(lhs) {
         return 0;
     }
     return lhs - rhs;
+}
+
+fn min(lhs: anytype, rhs: @TypeOf(lhs)) @TypeOf(lhs) {
+    if (rhs < lhs) {
+        return rhs;
+    }
+    return lhs;
 }

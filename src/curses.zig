@@ -8,7 +8,7 @@ const Error = error.CursesError;
 
 pub const Key = c_uint;
 
-const ScreenSize = struct {
+pub const ScreenSize = struct {
     rows: u16,
     cols: u16,
 };
