@@ -19,6 +19,7 @@ const Snap = struct {
     buffer: [MAX_INPUT]u8,
     length: u32,
     cursor: u32,
+    offset: u32,
 };
 
 const keys = struct {
@@ -39,6 +40,7 @@ pub fn main() !void {
             .buffer = undefined,
             .length = 0,
             .cursor = 0,
+            .offset = 0,
         },
     };
 
@@ -101,16 +103,25 @@ const Ui = struct {
 
         try self.drawInputBox();
 
+        try window.move(input_box.y + 1, input_box.x + 1);
+        for (0..input_box.width) |i| {
+            const index = i + state.snap.offset;
+            if (index >= state.snap.length) {
+                break;
+            }
+            try window.addch(state.snap.buffer[index]);
+        }
+
         try window.move(
             input_box.y + 2,
-            @intCast(@as(usize, input_box.x) + state.snap.cursor + 1),
+            @intCast(@as(usize, input_box.x) + state.snap.cursor - state.snap.offset + 1),
         );
         try window.addch('^');
 
-        try window.move(input_box.y + 1, input_box.x + 1);
-        for (0..state.snap.length) |i| {
-            try window.addch(state.snap.buffer[i]);
-        }
+        try window.move(
+            input_box.y + 1,
+            @intCast(@as(usize, input_box.x) + state.snap.cursor - state.snap.offset + 1),
+        );
 
         const key = try window.getch();
         switch (state.mode) {
@@ -142,6 +153,10 @@ const Ui = struct {
                             }
                             state.snap.cursor -= 1;
                             state.snap.length -= 1;
+
+                            if (state.snap.offset > 0 and state.snap.cursor - state.snap.offset < 2) {
+                                state.snap.offset -= 1;
+                            }
                         }
                     },
 
@@ -165,6 +180,10 @@ const Ui = struct {
                             state.snap.buffer[state.snap.cursor] = @intCast(key);
                             state.snap.cursor += 1;
                             state.snap.length += 1;
+
+                            if (state.snap.cursor - state.snap.offset > input_box.width - 2) {
+                                state.snap.offset += 1;
+                            }
                         }
                     },
 
@@ -195,3 +214,10 @@ const Ui = struct {
         try window.addch('+');
     }
 };
+
+fn subsat(rhs: anytype, lhs: anytype) @TypeOf(lhs) {
+    if (rhs >= lhs) {
+        return 0;
+    }
+    return lhs - rhs;
+}
