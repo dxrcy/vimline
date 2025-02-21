@@ -78,3 +78,13 @@ pub fn noecho() !void {
 pub fn set_escdelay(delay: c_int) !void {
     _ = try asError(c.set_escdelay(delay));
 }
+
+pub const CursorStyle = enum(u8) {
+    SteadyBlock = 2,
+    SteadyBar = 6,
+};
+
+pub fn setCursor(cursor: CursorStyle) void {
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("\x1b[{} q", .{@intFromEnum(cursor)}) catch {};
+}

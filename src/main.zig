@@ -97,7 +97,7 @@ const Ui = struct {
         try window.move(size.rows - 1, 0);
         const mode = switch (state.mode) {
             VimMode.Normal => "NORMAL",
-            VimMode.Insert => "Insert",
+            VimMode.Insert => "INSERT",
         };
         try window.addstr(mode);
 
@@ -117,6 +117,12 @@ const Ui = struct {
             @intCast(@as(usize, input_box.x) + state.snap.cursor - state.snap.offset + 1),
         );
         try window.addch('^');
+
+        if (state.mode == .Insert) {
+            curses.setCursor(.SteadyBar);
+        } else {
+            curses.setCursor(.SteadyBlock);
+        }
 
         try window.move(
             input_box.y + 1,
