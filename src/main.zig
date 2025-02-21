@@ -24,13 +24,13 @@ const Snap = struct {
 const InputBox = struct {
     x: u16,
     y: u16,
-    width: u32,
+    width: u16,
 };
 
 var input_box = InputBox{
     .x = 2,
     .y = 5,
-    .width = 20,
+    .width = 40,
 };
 
 const keys = struct {
@@ -68,13 +68,31 @@ pub fn main() !void {
         curses.endwin() catch {};
     }
 
-    var key: c_uint = 0;
     while (true) {
-        try frame(&stdscr, &state, &key);
+        try frame(&stdscr, &state);
     }
 }
 
-fn frame(stdscr: *const curses.Window, state: *State, key: *curses.Key) !void {
+fn drawInputBox(stdscr: *const curses.Window) !void {
+    try stdscr.move(input_box.y, input_box.x);
+    try stdscr.addch('+');
+    for (0..input_box.width) |_| {
+        try stdscr.addch('-');
+    }
+    try stdscr.addch('+');
+    try stdscr.move(input_box.y + 1, input_box.x);
+    try stdscr.addch('|');
+    try stdscr.move(input_box.y + 1, input_box.x + input_box.width + 1);
+    try stdscr.addch('|');
+    try stdscr.move(input_box.y + 2, input_box.x);
+    try stdscr.addch('+');
+    for (0..input_box.width) |_| {
+        try stdscr.addch('-');
+    }
+    try stdscr.addch('+');
+}
+
+fn frame(stdscr: *const curses.Window, state: *State) !void {
     try stdscr.clear();
 
     const size = try stdscr.getScreenSize();
@@ -86,19 +104,21 @@ fn frame(stdscr: *const curses.Window, state: *State, key: *curses.Key) !void {
     };
     try stdscr.addstr(mode);
 
-    try stdscr.move(input_box.y + 1, @intCast(@as(usize, input_box.x) + state.snap.cursor));
+    try drawInputBox(stdscr);
+
+    try stdscr.move(input_box.y + 2, @intCast(@as(usize, input_box.x) + state.snap.cursor + 1));
     try stdscr.addch('^');
 
-    try stdscr.move(input_box.y, input_box.x);
+    try stdscr.move(input_box.y + 1, input_box.x + 1);
     for (0..state.snap.length) |i| {
         try stdscr.addch(state.snap.buffer[i]);
     }
 
-    key.* = try stdscr.getch();
+    const key = try stdscr.getch();
 
     switch (state.mode) {
         VimMode.Normal => {
-            switch (key.*) {
+            switch (key) {
                 'q' => {
                     try curses.endwin();
                     std.process.exit(0);
@@ -113,7 +133,7 @@ fn frame(stdscr: *const curses.Window, state: *State, key: *curses.Key) !void {
         },
 
         VimMode.Insert => {
-            switch (key.*) {
+            switch (key) {
                 keys.ESCAPE => {
                     state.mode = .Normal;
                 },
@@ -145,7 +165,7 @@ fn frame(stdscr: *const curses.Window, state: *State, key: *curses.Key) !void {
                         while (i > state.snap.cursor) : (i -= 1) {
                             state.snap.buffer[i] = state.snap.buffer[i - 1];
                         }
-                        state.snap.buffer[state.snap.cursor] = @intCast(key.*);
+                        state.snap.buffer[state.snap.cursor] = @intCast(key);
                         state.snap.cursor += 1;
                         state.snap.length += 1;
                     }
