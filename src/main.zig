@@ -8,34 +8,14 @@ const Window = curses.Window;
 
 const MAX_INPUT = 200;
 
-const box = struct {
-    const MAX_WIDTH = 70;
-    const MARGIN = 2;
-};
-
-const padding = struct {
+const box_padding = struct {
     const LEFT = 5;
     const RIGHT_FULL = 3;
     const RIGHT_EMPTY = 1;
 };
-
-const State = struct {
-    mode: VimMode,
-    snap: Snap,
-};
-
-const VimMode = enum {
-    Normal,
-    Insert,
-    Replace,
-    Visual,
-};
-
-const Snap = struct {
-    buffer: [MAX_INPUT]u8,
-    length: u32,
-    cursor: u32,
-    offset: u32,
+const box_size = struct {
+    const MAX_WIDTH = 70;
+    const MARGIN = 2;
 };
 
 const keys = struct {
@@ -51,6 +31,13 @@ const keys = struct {
     const PRINTABLE_END = 0x7e;
 };
 
+const VimMode = enum {
+    Normal,
+    Insert,
+    Replace,
+    Visual,
+};
+
 pub fn main() !void {
     var state = State{
         .mode = .Normal,
@@ -62,6 +49,7 @@ pub fn main() !void {
         },
     };
 
+    // temporary
     @memcpy(state.snap.buffer[0..6], "abcdef");
     state.snap.length = 6;
     state.snap.cursor = 6;
@@ -74,19 +62,43 @@ pub fn main() !void {
     }
 }
 
+const State = struct {
+    mode: VimMode,
+    snap: Snap,
+
+    fn writeFinalSnap(self: *const State) void {
+        const text = self.snap.buffer[0..self.snap.length];
+        const stdout = std.io.getStdOut().writer();
+        stdout.print("{s}\n", .{text}) catch {};
+    }
+};
+
+const Snap = struct {
+    buffer: [MAX_INPUT]u8,
+    length: u32,
+    cursor: u32,
+    offset: u32,
+
+    fn updateOffsetLeft(self: *Snap) void {
+        if (self.cursor < self.offset + box_padding.LEFT) {
+            self.offset = subsat(self.cursor, box_padding.LEFT);
+        }
+    }
+
+    fn updateOffsetRight(self: *Snap, width: u16) void {
+        const padding_right: u32 = if (self.cursor + 1 >= self.length)
+            box_padding.RIGHT_EMPTY
+        else
+            box_padding.RIGHT_FULL;
+
+        if (self.cursor + padding_right > self.offset + width) {
+            self.offset = subsat(self.cursor + padding_right, width);
+        }
+    }
+};
+
 const Ui = struct {
     window: Window,
-
-    const InputBox = struct {
-        x: u16,
-        y: u16,
-        width: u16,
-    };
-    var input_box = InputBox{
-        .x = 2,
-        .y = 5,
-        .width = 40,
-    };
 
     fn init() !Ui {
         const window = try curses.initscr();
@@ -111,9 +123,9 @@ const Ui = struct {
         try window.clear();
 
         const size = try window.getScreenSize();
-        updateInputBox(size);
+        const box = Box.fromScreenSize(size);
 
-        try window.move(size.rows - 1, 0);
+        try window.move(size.rows - 1, 1);
         const mode = switch (state.mode) {
             VimMode.Normal => "NORMAL ",
             VimMode.Insert => "INSERT ",
@@ -122,10 +134,10 @@ const Ui = struct {
         };
         try window.addstr(mode);
 
-        try self.drawInputBox();
+        try self.drawBox(box);
 
-        try window.move(input_box.y + 1, input_box.x + 1);
-        for (0..input_box.width) |i| {
+        try window.move(box.y + 1, box.x + 1);
+        for (0..box.width) |i| {
             const index = i + state.snap.offset;
             if (index >= state.snap.length) {
                 break;
@@ -142,9 +154,9 @@ const Ui = struct {
         }
 
         const cursor_x: u16 = @intCast(
-            subsat(input_box.x + state.snap.cursor, state.snap.offset) + 1,
+            subsat(box.x + state.snap.cursor, state.snap.offset) + 1,
         );
-        try window.move(input_box.y + 1, cursor_x);
+        try window.move(box.y + 1, cursor_x);
 
         const key = try window.getch();
         switch (state.mode) {
@@ -157,20 +169,20 @@ const Ui = struct {
 
                     keys.RETURN => {
                         try curses.endwin();
-                        saveInput(state);
+                        state.writeFinalSnap();
                         std.process.exit(0);
                     },
 
                     'h', keys.ARROW_LEFT => {
                         if (state.snap.cursor > 0) {
                             state.snap.cursor -= 1;
-                            updateOffsetLeft(&state.snap);
+                            state.snap.updateOffsetLeft();
                         }
                     },
                     'l', keys.ARROW_RIGHT => {
                         if (state.snap.cursor < state.snap.length) {
                             state.snap.cursor += 1;
-                            updateOffsetRight(&state.snap);
+                            state.snap.updateOffsetRight(box.width);
                         }
                     },
 
@@ -214,7 +226,7 @@ const Ui = struct {
 
                     keys.RETURN => {
                         try curses.endwin();
-                        saveInput(state);
+                        state.writeFinalSnap();
                         std.process.exit(0);
                     },
 
@@ -225,20 +237,20 @@ const Ui = struct {
                             }
                             state.snap.cursor -= 1;
                             state.snap.length -= 1;
-                            updateOffsetLeft(&state.snap);
+                            state.snap.updateOffsetLeft();
                         }
                     },
 
                     keys.ARROW_LEFT => {
                         if (state.snap.cursor > 0) {
                             state.snap.cursor -= 1;
-                            updateOffsetLeft(&state.snap);
+                            state.snap.updateOffsetLeft();
                         }
                     },
                     keys.ARROW_RIGHT => {
                         if (state.snap.cursor < state.snap.length) {
                             state.snap.cursor += 1;
-                            updateOffsetRight(&state.snap);
+                            state.snap.updateOffsetRight(box.width);
                         }
                     },
 
@@ -251,7 +263,7 @@ const Ui = struct {
                             state.snap.buffer[state.snap.cursor] = @intCast(key);
                             state.snap.cursor += 1;
                             state.snap.length += 1;
-                            updateOffsetRight(&state.snap);
+                            state.snap.updateOffsetRight(box.width);
                         }
                     },
 
@@ -278,60 +290,42 @@ const Ui = struct {
         }
     }
 
-    fn drawInputBox(self: Ui) !void {
+    fn drawBox(self: Ui, box: Box) !void {
         const window = self.window;
 
-        try window.move(input_box.y, input_box.x);
+        try window.move(box.y, box.x);
         try window.addch(acs.ULCORNER);
-        for (0..input_box.width) |_| {
+        for (0..box.width) |_| {
             try window.addch(acs.HLINE);
         }
         try window.addch(acs.URCORNER);
 
-        try window.move(input_box.y + 1, input_box.x);
+        try window.move(box.y + 1, box.x);
         try window.addch(acs.VLINE);
-        try window.move(input_box.y + 1, input_box.x + input_box.width + 1);
+        try window.move(box.y + 1, box.x + box.width + 1);
         try window.addch(acs.VLINE);
 
-        try window.move(input_box.y + 2, input_box.x);
+        try window.move(box.y + 2, box.x);
         try window.addch(acs.LLCORNER);
-        for (0..input_box.width) |_| {
+        for (0..box.width) |_| {
             try window.addch(acs.HLINE);
         }
         try window.addch(acs.LRCORNER);
     }
 };
 
-fn updateInputBox(size: ScreenSize) void {
-    Ui.input_box.width = min(size.cols - box.MARGIN * 2 - 2, box.MAX_WIDTH);
-    Ui.input_box.x = (size.cols - Ui.input_box.width) / 2 - 1;
-    Ui.input_box.y = size.rows / 2 - 1;
-}
+const Box = struct {
+    x: u16,
+    y: u16,
+    width: u16,
 
-fn saveInput(state: *const State) void {
-    const input = state.snap.buffer[0..state.snap.length];
-    const stdout = std.io.getStdOut().writer();
-    stdout.print("{s}\n", .{input}) catch {};
-}
-
-fn updateOffsetLeft(snap: *Snap) void {
-    if (snap.cursor < snap.offset + padding.LEFT) {
-        snap.offset = subsat(snap.cursor, padding.LEFT);
+    fn fromScreenSize(size: ScreenSize) Box {
+        const width = min(size.cols - box_size.MARGIN * 2 - 2, box_size.MAX_WIDTH);
+        const x = (size.cols - width) / 2 - 1;
+        const y = size.rows / 2 - 1;
+        return Box{ .width = width, .x = x, .y = y };
     }
-}
-
-fn updateOffsetRight(snap: *Snap) void {
-    const width = Ui.input_box.width;
-
-    const padding_right: u32 = if (snap.cursor + 1 >= snap.length)
-        padding.RIGHT_EMPTY
-    else
-        padding.RIGHT_FULL;
-
-    if (snap.cursor + padding_right > snap.offset + width) {
-        snap.offset = subsat(snap.cursor + padding_right, width);
-    }
-}
+};
 
 fn subsat(lhs: anytype, rhs: anytype) @TypeOf(lhs) {
     if (rhs >= lhs) {
