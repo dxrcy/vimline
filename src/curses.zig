@@ -6,7 +6,7 @@ pub const c = @cImport({
 
 const Error = error.CursesError;
 
-const Key = c_uint;
+pub const Key = c_uint;
 
 fn asError(res: c_int) !c_int {
     if (res == c.ERR) {
@@ -41,12 +41,16 @@ pub fn endwin() !void {
     _ = try asError(c.endwin());
 }
 
-pub fn clear() !void {
-    _ = try asError(c.clear());
-}
-
 pub fn noecho() !void {
     _ = try asError(c.noecho());
+}
+
+pub fn set_escdelay(delay: c_int) !void {
+    _ = try asError(c.set_escdelay(delay));
+}
+
+pub fn clear() !void {
+    _ = try asError(c.clear());
 }
 
 pub fn move(y: u16, x: u16) !void {
