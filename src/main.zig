@@ -56,10 +56,10 @@ pub fn main() !void {
         const buffer = "abcdef ghijkl mnopqr stuvwx yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
         @memcpy(state.snap.buffer[0..buffer.len], buffer);
         state.snap.length = buffer.len;
-        state.snap.cursor = buffer.len;
+        state.snap.cursor = buffer.len - 1;
         const size = try ui.window.getScreenSize();
         const box = Box.fromScreenSize(size);
-        state.snap.updateOffsetRight(box.width);
+        state.snap.offset = subsat(state.snap.cursor + box_padding.RIGHT_EMPTY + 1, box.width);
     }
 
     while (true) {
@@ -125,10 +125,10 @@ const Ui = struct {
     fn frame(self: Ui, state: *State) !void {
         const window = self.window;
 
-        try window.clear();
-
         const size = try window.getScreenSize();
         const box = Box.fromScreenSize(size);
+
+        try window.clear();
 
         try window.move(size.rows - 1, 1);
         const mode = switch (state.mode) {
@@ -192,16 +192,36 @@ const Ui = struct {
                         }
                     },
                     'l', keys.ARROW_RIGHT => {
-                        if (state.snap.cursor < state.snap.length) {
+                        if (state.snap.cursor + 1 < state.snap.length) {
                             state.snap.cursor += 1;
                             state.snap.updateOffsetRight(box.width);
                         }
                     },
 
-                    '^', '_' => {},
+                    '^', '_' => {
+                        var i: u32 = 0;
+                        while (std.ascii.isWhitespace(state.snap.buffer[i])) {
+                            i += 1;
+                        }
+                        state.snap.cursor = i;
+                        state.snap.updateOffsetLeft();
+                    },
+                    '0' => {
+                        state.snap.cursor = 0;
+                        state.snap.updateOffsetLeft();
+                    },
+                    '$' => {
+                        state.snap.cursor = state.snap.length - 1;
+                        state.snap.updateOffsetRight(box.width);
+                    },
 
                     'i' => {
                         state.mode = .Insert;
+                    },
+                    'a' => {
+                        state.mode = .Insert;
+                        state.snap.cursor += 1;
+                        state.snap.updateOffsetRight(box.width);
                     },
 
                     'r' => {
@@ -221,7 +241,6 @@ const Ui = struct {
 
                     // TODO: v
                     // TODO: V
-                    // TODO: a
                     // TODO: I
                     // TODO: A
                     // TODO: w
@@ -230,9 +249,6 @@ const Ui = struct {
                     // TODO: W
                     // TODO: E
                     // TODO: B
-                    // TODO: ^, _
-                    // TODO: 0
-                    // TODO: $
                     // TODO: D
                     // TODO: 0
                     // TODO: u
@@ -246,6 +262,7 @@ const Ui = struct {
                 switch (key) {
                     keys.ESCAPE => {
                         state.mode = .Normal;
+                        state.snap.cursor = subsat(state.snap.cursor, 1);
                     },
 
                     keys.RETURN => {
