@@ -49,13 +49,18 @@ pub fn main() !void {
         },
     };
 
-    // temporary
-    @memcpy(state.snap.buffer[0..6], "abcdef");
-    state.snap.length = 6;
-    state.snap.cursor = 6;
-
     const ui = try Ui.init();
     defer ui.deinit();
+
+    { // Temporary
+        const buffer = "abcdef ghijkl mnopqr stuvwx yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
+        @memcpy(state.snap.buffer[0..buffer.len], buffer);
+        state.snap.length = buffer.len;
+        state.snap.cursor = buffer.len;
+        const size = try ui.window.getScreenSize();
+        const box = Box.fromScreenSize(size);
+        state.snap.updateOffsetRight(box.width);
+    }
 
     while (true) {
         try ui.frame(&state);
@@ -134,7 +139,11 @@ const Ui = struct {
         };
         try window.addstr(mode);
 
-        try self.drawBox(box);
+        try self.drawBox(
+            box,
+            state.snap.offset > 0,
+            state.snap.offset + box.width < state.snap.length,
+        );
 
         try window.move(box.y + 1, box.x + 1);
         for (0..box.width) |i| {
@@ -154,7 +163,10 @@ const Ui = struct {
         }
 
         const cursor_x: u16 = @intCast(
-            subsat(box.x + state.snap.cursor, state.snap.offset) + 1,
+            box.x + min(
+                @as(u32, box.width),
+                subsat(state.snap.cursor, state.snap.offset),
+            ) + 1,
         );
         try window.move(box.y + 1, cursor_x);
 
@@ -185,6 +197,8 @@ const Ui = struct {
                             state.snap.updateOffsetRight(box.width);
                         }
                     },
+
+                    '^', '_' => {},
 
                     'i' => {
                         state.mode = .Insert;
@@ -300,7 +314,7 @@ const Ui = struct {
         }
     }
 
-    fn drawBox(self: Ui, box: Box) !void {
+    fn drawBox(self: Ui, box: Box, left_open: bool, right_open: bool) !void {
         const window = self.window;
 
         try window.move(box.y, box.x);
@@ -311,9 +325,9 @@ const Ui = struct {
         try window.addch(acs.URCORNER);
 
         try window.move(box.y + 1, box.x);
-        try window.addch(acs.VLINE);
+        try window.addch(if (left_open) ':' else acs.VLINE);
         try window.move(box.y + 1, box.x + box.width + 1);
-        try window.addch(acs.VLINE);
+        try window.addch(if (right_open) ':' else acs.VLINE);
 
         try window.move(box.y + 2, box.x);
         try window.addch(acs.LLCORNER);
