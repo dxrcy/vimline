@@ -58,7 +58,7 @@ pub fn main() !void {
         state.snap.length = buffer.len;
         state.snap.cursor = buffer.len - 1;
         const size = try ui.window.getScreenSize();
-        const box = Box.fromScreenSize(size);
+        box.update(size);
         state.snap.offset = subsat(state.snap.cursor + box_padding.RIGHT_EMPTY + 1, box.width);
     }
 
@@ -78,6 +78,18 @@ const State = struct {
     }
 };
 
+const box = struct {
+    var x: u16 = 0;
+    var y: u16 = 0;
+    var width: u16 = 10;
+
+    fn update(size: ScreenSize) void {
+        width = min(size.cols - box_size.MARGIN * 2 - 2, box_size.MAX_WIDTH);
+        x = (size.cols - width) / 2 - 1;
+        y = size.rows / 2 - 1;
+    }
+};
+
 const Snap = struct {
     buffer: [MAX_INPUT]u8,
     length: u32,
@@ -90,7 +102,9 @@ const Snap = struct {
         }
     }
 
-    fn updateOffsetRight(self: *Snap, width: u16) void {
+    fn updateOffsetRight(self: *Snap) void {
+        const width = box.width;
+
         const padding_right: u32 = if (self.cursor + 1 >= self.length)
             box_padding.RIGHT_EMPTY
         else
@@ -101,9 +115,17 @@ const Snap = struct {
         }
     }
 
-    fn delete(self: *Snap) bool {
+    fn firstNonwhitespaceIndex(self: *const Snap) u32 {
+        var i: u32 = 0;
+        while (std.ascii.isWhitespace(self.buffer[i])) {
+            i += 1;
+        }
+        return i;
+    }
+
+    fn delete(self: *Snap) void {
         if (self.length == 0 or self.cursor >= self.length) {
-            return false;
+            return;
         }
 
         for (self.cursor + 1..self.length) |i| {
@@ -114,12 +136,12 @@ const Snap = struct {
             self.cursor -= 1;
         }
 
-        return true;
+        self.updateOffsetLeft();
     }
 
-    fn backspace(self: *Snap) bool {
+    fn backspace(self: *Snap) void {
         if (self.cursor == 0 or self.length == 0) {
-            return false;
+            return;
         }
 
         for (self.cursor..self.length) |i| {
@@ -128,12 +150,12 @@ const Snap = struct {
         self.length -= 1;
         self.cursor -= 1;
 
-        return true;
+        self.updateOffsetLeft();
     }
 
-    fn insertChar(self: *Snap, char: u8) bool {
+    fn insertChar(self: *Snap, char: u8) void {
         if (self.length >= MAX_INPUT) {
-            return false;
+            return;
         }
 
         var i = self.length;
@@ -144,7 +166,7 @@ const Snap = struct {
         self.cursor += 1;
         self.length += 1;
 
-        return true;
+        self.updateOffsetRight();
     }
 
     fn replaceChar(self: *Snap, char: u8) void {
@@ -158,28 +180,24 @@ const Snap = struct {
         }
     }
 
-    fn moveLeft(self: *Snap) bool {
+    fn moveLeft(self: *Snap) void {
         if (self.cursor == 0) {
-            return false;
+            return;
         }
+
         self.cursor -= 1;
-        return true;
+
+        self.updateOffsetLeft();
     }
 
-    fn moveRight(self: *Snap) bool {
+    fn moveRight(self: *Snap) void {
         if (self.cursor + 1 >= self.length) {
-            return false;
+            return;
         }
-        self.cursor += 1;
-        return true;
-    }
 
-    fn firstNonwhitespaceIndex(self: *const Snap) u32 {
-        var i: u32 = 0;
-        while (std.ascii.isWhitespace(self.buffer[i])) {
-            i += 1;
-        }
-        return i;
+        self.cursor += 1;
+
+        self.updateOffsetRight();
     }
 };
 
@@ -207,7 +225,7 @@ const Ui = struct {
         const window = self.window;
 
         const size = try window.getScreenSize();
-        const box = Box.fromScreenSize(size);
+        box.update(size);
 
         try window.clear();
 
@@ -221,7 +239,6 @@ const Ui = struct {
         try window.addstr(mode);
 
         try self.drawBox(
-            box,
             state.snap.offset > 0,
             state.snap.offset + box.width < state.snap.length,
         );
@@ -267,9 +284,7 @@ const Ui = struct {
                     },
 
                     'x' => {
-                        if (state.snap.delete()) {
-                            state.snap.updateOffsetLeft();
-                        }
+                        state.snap.delete();
                     },
 
                     'r' => {
@@ -284,7 +299,7 @@ const Ui = struct {
                         if (state.snap.cursor < state.snap.length) {
                             state.snap.cursor += 1;
                         }
-                        state.snap.updateOffsetRight(box.width);
+                        state.snap.updateOffsetRight();
                     },
 
                     'I' => {
@@ -295,7 +310,7 @@ const Ui = struct {
                     'A' => {
                         state.mode = .Insert;
                         state.snap.cursor = state.snap.length;
-                        state.snap.updateOffsetRight(box.width);
+                        state.snap.updateOffsetRight();
                     },
 
                     '^', '_' => {
@@ -308,18 +323,14 @@ const Ui = struct {
                     },
                     '$' => {
                         state.snap.cursor = state.snap.length - 1;
-                        state.snap.updateOffsetRight(box.width);
+                        state.snap.updateOffsetRight();
                     },
 
                     'h', keys.ARROW_LEFT => {
-                        if (state.snap.moveLeft()) {
-                            state.snap.updateOffsetLeft();
-                        }
+                        state.snap.moveLeft();
                     },
                     'l', keys.ARROW_RIGHT => {
-                        if (state.snap.moveRight()) {
-                            state.snap.updateOffsetRight(box.width);
-                        }
+                        state.snap.moveRight();
                     },
 
                     'D' => {
@@ -355,26 +366,18 @@ const Ui = struct {
                     },
 
                     keys.BACKSPACE => {
-                        if (state.snap.backspace()) {
-                            state.snap.updateOffsetLeft();
-                        }
+                        state.snap.backspace();
                     },
 
                     keys.ARROW_LEFT => {
-                        if (state.snap.moveLeft()) {
-                            state.snap.updateOffsetLeft();
-                        }
+                        state.snap.moveLeft();
                     },
                     keys.ARROW_RIGHT => {
-                        if (state.snap.moveRight()) {
-                            state.snap.updateOffsetRight(box.width);
-                        }
+                        state.snap.moveRight();
                     },
 
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        if (state.snap.insertChar(@intCast(key))) {
-                            state.snap.updateOffsetRight(box.width);
-                        }
+                        state.snap.insertChar(@intCast(key));
                     },
 
                     else => {},
@@ -384,7 +387,7 @@ const Ui = struct {
             .Replace => {
                 switch (key) {
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        self.snap.replaceChar(@intCast(key));
+                        state.snap.replaceChar(@intCast(key));
                         state.mode = .Normal;
                     },
 
@@ -400,7 +403,7 @@ const Ui = struct {
         }
     }
 
-    fn drawBox(self: Ui, box: Box, left_open: bool, right_open: bool) !void {
+    fn drawBox(self: Ui, left_open: bool, right_open: bool) !void {
         const window = self.window;
 
         try window.move(box.y, box.x);
@@ -421,19 +424,6 @@ const Ui = struct {
             try window.addch(acs.HLINE);
         }
         try window.addch(acs.LRCORNER);
-    }
-};
-
-const Box = struct {
-    x: u16,
-    y: u16,
-    width: u16,
-
-    fn fromScreenSize(size: ScreenSize) Box {
-        const width = min(size.cols - box_size.MARGIN * 2 - 2, box_size.MAX_WIDTH);
-        const x = (size.cols - width) / 2 - 1;
-        const y = size.rows / 2 - 1;
-        return Box{ .width = width, .x = x, .y = y };
     }
 };
 
