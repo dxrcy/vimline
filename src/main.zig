@@ -1,6 +1,8 @@
 const std = @import("std");
 const print = std.debug.print;
 
+const lib = @import("./lib.zig");
+
 const curses = @import("./curses.zig");
 const acs = curses.acs;
 const ScreenSize = curses.ScreenSize;
@@ -9,14 +11,14 @@ const Key = curses.Key;
 
 const MAX_INPUT = 200;
 
+const box_size = struct {
+    const MAX_WIDTH = 70;
+    const MARGIN = 2;
+};
 const box_padding = struct {
     const LEFT = 5;
     const RIGHT_FULL = 3;
     const RIGHT_EMPTY = 1;
-};
-const box_size = struct {
-    const MAX_WIDTH = 70;
-    const MARGIN = 2;
 };
 
 const keys = struct {
@@ -85,8 +87,7 @@ const State = struct {
 
     fn saveResult(self: *const State) void {
         const text = self.snap.buffer[0..self.snap.length];
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("{s}\n", .{text}) catch {};
+        lib.printStdout("{s}\n", .{text});
     }
 
     fn handleKey(self: *State, key: Key) !void {
@@ -166,7 +167,7 @@ const State = struct {
                 switch (key) {
                     keys.ESCAPE => {
                         self.mode = .Normal;
-                        self.snap.cursor = subsat(self.snap.cursor, 1);
+                        self.snap.moveLeft();
                     },
 
                     keys.RETURN => {

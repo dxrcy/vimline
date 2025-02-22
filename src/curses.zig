@@ -1,4 +1,5 @@
 const std = @import("std");
+const lib = @import("./lib.zig");
 
 pub const c = @cImport({
     @cInclude("curses.h");
@@ -57,8 +58,6 @@ pub const Window = struct {
     }
 };
 
-// TODO: use `w*` versions
-
 pub fn initscr() !Window {
     return Window{
         .window = c.initscr() orelse return error.CursesError,
@@ -68,11 +67,9 @@ pub fn initscr() !Window {
 pub fn endwin() !void {
     _ = try asError(c.endwin());
 }
-
 pub fn noecho() !void {
     _ = try asError(c.noecho());
 }
-
 pub fn set_escdelay(delay: c_int) !void {
     _ = try asError(c.set_escdelay(delay));
 }
@@ -84,8 +81,7 @@ pub const CursorStyle = enum(u8) {
 };
 
 pub fn setCursor(cursor: CursorStyle) void {
-    const stdout = std.io.getStdOut().writer();
-    stdout.print("\x1b[{} q", .{@intFromEnum(cursor)}) catch {};
+    lib.printStdout("\x1b[{} q", .{@intFromEnum(cursor)});
 }
 
 pub const acs = struct {
