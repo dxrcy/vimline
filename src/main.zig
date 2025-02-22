@@ -41,6 +41,18 @@ const VimMode = enum {
     Visual,
 };
 
+const box = struct {
+    var x: u16 = 0;
+    var y: u16 = 0;
+    var width: u16 = 10;
+
+    fn update(size: ScreenSize) void {
+        width = min(size.cols - box_size.MARGIN * 2 - 2, box_size.MAX_WIDTH);
+        x = (size.cols - width) / 2 - 1;
+        y = size.rows / 2 - 1;
+    }
+};
+
 pub fn main() !void {
     var state = State{
         .mode = .Normal,
@@ -104,7 +116,7 @@ const State = struct {
                     },
 
                     'x' => {
-                        self.snap.delete();
+                        self.snap.removeNextChar();
                     },
 
                     'r' => {
@@ -116,20 +128,20 @@ const State = struct {
                     },
                     'a' => {
                         self.mode = .Insert;
-                        self.snap.moveRight2();
+                        self.snap.moveRightInsert();
                     },
 
                     'I' => {
                         self.mode = .Insert;
-                        self.snap.moveToStart2();
+                        self.snap.moveToFirstNonspace();
                     },
                     'A' => {
                         self.mode = .Insert;
-                        self.snap.moveToEnd2();
+                        self.snap.moveToEndInsert();
                     },
 
                     '^', '_' => {
-                        self.snap.moveToStart2();
+                        self.snap.moveToFirstNonspace();
                     },
                     '0' => {
                         self.snap.moveToStart();
@@ -146,7 +158,7 @@ const State = struct {
                     },
 
                     'D' => {
-                        self.snap.deleteRight();
+                        self.snap.deleteToEnd();
                     },
 
                     // TODO: v
@@ -176,7 +188,7 @@ const State = struct {
                     },
 
                     keys.BACKSPACE => {
-                        self.snap.backspace();
+                        self.snap.removePreviousChar();
                     },
 
                     keys.ARROW_LEFT => {
@@ -214,18 +226,6 @@ const State = struct {
     }
 };
 
-const box = struct {
-    var x: u16 = 0;
-    var y: u16 = 0;
-    var width: u16 = 10;
-
-    fn update(size: ScreenSize) void {
-        width = min(size.cols - box_size.MARGIN * 2 - 2, box_size.MAX_WIDTH);
-        x = (size.cols - width) / 2 - 1;
-        y = size.rows / 2 - 1;
-    }
-};
-
 const Snap = struct {
     buffer: [MAX_INPUT]u8,
     length: u32,
@@ -255,7 +255,7 @@ const Snap = struct {
         self.offset = subsat(self.cursor + box_padding.RIGHT_EMPTY + 1, box.width);
     }
 
-    fn firstNonwhitespaceIndex(self: *const Snap) u32 {
+    fn firstNonspaceIndex(self: *const Snap) u32 {
         var i: u32 = 0;
         while (std.ascii.isWhitespace(self.buffer[i])) {
             i += 1;
@@ -263,7 +263,7 @@ const Snap = struct {
         return i;
     }
 
-    fn delete(self: *Snap) void {
+    fn removeNextChar(self: *Snap) void {
         if (self.length == 0 or self.cursor >= self.length) {
             return;
         }
@@ -279,7 +279,7 @@ const Snap = struct {
         self.updateOffsetLeft();
     }
 
-    fn backspace(self: *Snap) void {
+    fn removePreviousChar(self: *Snap) void {
         if (self.cursor == 0 or self.length == 0) {
             return;
         }
@@ -313,7 +313,7 @@ const Snap = struct {
         self.buffer[self.cursor] = char;
     }
 
-    fn deleteRight(self: *Snap) void {
+    fn deleteToEnd(self: *Snap) void {
         if (self.length < self.cursor) {
             return;
         }
@@ -339,7 +339,7 @@ const Snap = struct {
         self.updateOffsetRight();
     }
 
-    fn moveRight2(self: *Snap) void {
+    fn moveRightInsert(self: *Snap) void {
         if (self.cursor >= self.length) {
             return;
         }
@@ -352,8 +352,8 @@ const Snap = struct {
         self.updateOffsetLeft();
     }
 
-    fn moveToStart2(self: *Snap) void {
-        self.cursor = self.firstNonwhitespaceIndex();
+    fn moveToFirstNonspace(self: *Snap) void {
+        self.cursor = self.firstNonspaceIndex();
         self.updateOffsetLeft();
     }
 
@@ -362,7 +362,7 @@ const Snap = struct {
         self.updateOffsetRight();
     }
 
-    fn moveToEnd2(self: *Snap) void {
+    fn moveToEndInsert(self: *Snap) void {
         self.cursor = self.length;
         self.updateOffsetRight();
     }
