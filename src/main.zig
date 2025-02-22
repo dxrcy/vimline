@@ -65,7 +65,9 @@ pub fn main() !void {
     }
 
     while (true) {
-        ui.render(window, &state) catch |err| switch (err) {
+        try ui.render(window, &state);
+
+        state.handleKey(try window.getch()) catch |err| switch (err) {
             error.Exit => break,
             else => return err,
         };
@@ -394,16 +396,10 @@ const ui = struct {
             state.snap.offset > 0,
             state.snap.offset + box.width < state.snap.length,
         );
-
         try ui.drawText(window, state);
 
         try ui.setCursor(state.mode);
-
         try ui.setCursorPosition(window, &state.snap);
-
-        // TODO: Move somewhere else
-        const key = try window.getch();
-        try state.handleKey(key);
     }
 
     fn drawModeName(window: Window, state: *const State, size: ScreenSize) !void {
