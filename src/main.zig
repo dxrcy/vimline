@@ -5,6 +5,7 @@ const curses = @import("./curses.zig");
 const acs = curses.acs;
 const ScreenSize = curses.ScreenSize;
 const Window = curses.Window;
+const Key = curses.Key;
 
 const MAX_INPUT = 200;
 
@@ -71,10 +72,140 @@ const State = struct {
     mode: VimMode,
     snap: Snap,
 
-    fn writeFinalSnap(self: *const State) void {
+    fn exit(self: *const State, save_result: bool) !void {
+        try curses.endwin();
+        if (save_result) {
+            self.saveResult();
+        }
+        std.process.exit(0);
+    }
+
+    fn saveResult(self: *const State) void {
         const text = self.snap.buffer[0..self.snap.length];
         const stdout = std.io.getStdOut().writer();
         stdout.print("{s}\n", .{text}) catch {};
+    }
+
+    fn handleKey(self: *State, key: Key) !void {
+        switch (self.mode) {
+            .Normal => {
+                switch (key) {
+                    'q' => {
+                        try self.exit(false);
+                    },
+
+                    keys.RETURN => {
+                        try self.exit(true);
+                    },
+
+                    'x' => {
+                        self.snap.delete();
+                    },
+
+                    'r' => {
+                        self.mode = .Replace;
+                    },
+
+                    'i' => {
+                        self.mode = .Insert;
+                    },
+                    'a' => {
+                        self.mode = .Insert;
+                        self.snap.moveRight2();
+                    },
+
+                    'I' => {
+                        self.mode = .Insert;
+                        self.snap.moveToStart2();
+                    },
+                    'A' => {
+                        self.mode = .Insert;
+                        self.snap.moveToEnd2();
+                    },
+
+                    '^', '_' => {
+                        self.snap.moveToStart2();
+                    },
+                    '0' => {
+                        self.snap.moveToStart();
+                    },
+                    '$' => {
+                        self.snap.moveToEnd();
+                    },
+
+                    'h', keys.ARROW_LEFT => {
+                        self.snap.moveLeft();
+                    },
+                    'l', keys.ARROW_RIGHT => {
+                        self.snap.moveRight();
+                    },
+
+                    'D' => {
+                        self.snap.deleteRight();
+                    },
+
+                    // TODO: v
+                    // TODO: V
+                    // TODO: w
+                    // TODO: e
+                    // TODO: b
+                    // TODO: W
+                    // TODO: E
+                    // TODO: B
+                    // TODO: u
+                    // TODO: <C-r>
+
+                    else => {},
+                }
+            },
+
+            .Insert => {
+                switch (key) {
+                    keys.ESCAPE => {
+                        self.mode = .Normal;
+                        self.snap.cursor = subsat(self.snap.cursor, 1);
+                    },
+
+                    keys.RETURN => {
+                        try self.exit(true);
+                    },
+
+                    keys.BACKSPACE => {
+                        self.snap.backspace();
+                    },
+
+                    keys.ARROW_LEFT => {
+                        self.snap.moveLeft();
+                    },
+                    keys.ARROW_RIGHT => {
+                        self.snap.moveRight();
+                    },
+
+                    keys.PRINTABLE_START...keys.PRINTABLE_END => {
+                        self.snap.insertChar(@intCast(key));
+                    },
+
+                    else => {},
+                }
+            },
+
+            .Replace => {
+                switch (key) {
+                    keys.PRINTABLE_START...keys.PRINTABLE_END => {
+                        self.mode = .Normal;
+                        self.snap.replaceChar(@intCast(key));
+                    },
+
+                    else => {
+                        self.mode = .Normal;
+                    },
+                }
+            },
+
+            .Visual => {
+                // TODO
+            },
+        }
     }
 };
 
@@ -300,130 +431,7 @@ const Ui = struct {
         try window.move(box.y + 1, cursor_x);
 
         const key = try window.getch();
-        switch (state.mode) {
-            .Normal => {
-                switch (key) {
-                    'q' => {
-                        try curses.endwin();
-                        std.process.exit(0);
-                    },
-
-                    keys.RETURN => {
-                        try curses.endwin();
-                        state.writeFinalSnap();
-                        std.process.exit(0);
-                    },
-
-                    'x' => {
-                        state.snap.delete();
-                    },
-
-                    'r' => {
-                        state.mode = .Replace;
-                    },
-
-                    'i' => {
-                        state.mode = .Insert;
-                    },
-                    'a' => {
-                        state.mode = .Insert;
-                        state.snap.moveRight2();
-                    },
-
-                    'I' => {
-                        state.mode = .Insert;
-                        state.snap.moveToStart2();
-                    },
-                    'A' => {
-                        state.mode = .Insert;
-                        state.snap.moveToEnd2();
-                    },
-
-                    '^', '_' => {
-                        state.snap.moveToStart2();
-                    },
-                    '0' => {
-                        state.snap.moveToStart();
-                    },
-                    '$' => {
-                        state.snap.moveToEnd();
-                    },
-
-                    'h', keys.ARROW_LEFT => {
-                        state.snap.moveLeft();
-                    },
-                    'l', keys.ARROW_RIGHT => {
-                        state.snap.moveRight();
-                    },
-
-                    'D' => {
-                        state.snap.deleteRight();
-                    },
-
-                    // TODO: v
-                    // TODO: V
-                    // TODO: w
-                    // TODO: e
-                    // TODO: b
-                    // TODO: W
-                    // TODO: E
-                    // TODO: B
-                    // TODO: u
-                    // TODO: <C-r>
-
-                    else => {},
-                }
-            },
-
-            .Insert => {
-                switch (key) {
-                    keys.ESCAPE => {
-                        state.mode = .Normal;
-                        state.snap.cursor = subsat(state.snap.cursor, 1);
-                    },
-
-                    keys.RETURN => {
-                        try curses.endwin();
-                        state.writeFinalSnap();
-                        std.process.exit(0);
-                    },
-
-                    keys.BACKSPACE => {
-                        state.snap.backspace();
-                    },
-
-                    keys.ARROW_LEFT => {
-                        state.snap.moveLeft();
-                    },
-                    keys.ARROW_RIGHT => {
-                        state.snap.moveRight();
-                    },
-
-                    keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        state.snap.insertChar(@intCast(key));
-                    },
-
-                    else => {},
-                }
-            },
-
-            .Replace => {
-                switch (key) {
-                    keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        state.mode = .Normal;
-                        state.snap.replaceChar(@intCast(key));
-                    },
-
-                    else => {
-                        state.mode = .Normal;
-                    },
-                }
-            },
-
-            .Visual => {
-                // TODO
-            },
-        }
+        try state.handleKey(key);
     }
 
     fn drawBox(self: Ui, left_open: bool, right_open: bool) !void {
