@@ -101,7 +101,80 @@ const Snap = struct {
         }
     }
 
-    fn firstNonwhitespaceCharacter(self: *const Snap) u32 {
+    fn delete(self: *Snap) bool {
+        if (self.length == 0 or self.cursor >= self.length) {
+            return false;
+        }
+
+        for (self.cursor + 1..self.length) |i| {
+            self.buffer[i - 1] = self.buffer[i];
+        }
+        self.length -= 1;
+        if (self.cursor >= self.length and self.cursor > 0) {
+            self.cursor -= 1;
+        }
+
+        return true;
+    }
+
+    fn backspace(self: *Snap) bool {
+        if (self.cursor == 0 or self.length == 0) {
+            return false;
+        }
+
+        for (self.cursor..self.length) |i| {
+            self.buffer[i - 1] = self.buffer[i];
+        }
+        self.length -= 1;
+        self.cursor -= 1;
+
+        return true;
+    }
+
+    fn insertChar(self: *Snap, char: u8) bool {
+        if (self.length >= MAX_INPUT) {
+            return false;
+        }
+
+        var i = self.length;
+        while (i > self.cursor) : (i -= 1) {
+            self.buffer[i] = self.buffer[i - 1];
+        }
+        self.buffer[self.cursor] = char;
+        self.cursor += 1;
+        self.length += 1;
+
+        return true;
+    }
+
+    fn replaceChar(self: *Snap, char: u8) void {
+        self.buffer[self.cursor] = char;
+    }
+
+    fn deleteRight(self: *Snap) void {
+        self.length = self.cursor;
+        if (self.length > 0) {
+            self.cursor -= 1;
+        }
+    }
+
+    fn moveLeft(self: *Snap) bool {
+        if (self.cursor == 0) {
+            return false;
+        }
+        self.cursor -= 1;
+        return true;
+    }
+
+    fn moveRight(self: *Snap) bool {
+        if (self.cursor + 1 >= self.length) {
+            return false;
+        }
+        self.cursor += 1;
+        return true;
+    }
+
+    fn firstNonwhitespaceIndex(self: *const Snap) u32 {
         var i: u32 = 0;
         while (std.ascii.isWhitespace(self.buffer[i])) {
             i += 1;
@@ -194,12 +267,7 @@ const Ui = struct {
                     },
 
                     'x' => {
-                        if (state.snap.cursor > 0 and state.snap.length > 0) {
-                            for (state.snap.cursor..state.snap.length) |i| {
-                                state.snap.buffer[i - 1] = state.snap.buffer[i];
-                            }
-                            state.snap.cursor -= 1;
-                            state.snap.length -= 1;
+                        if (state.snap.delete()) {
                             state.snap.updateOffsetLeft();
                         }
                     },
@@ -213,13 +281,15 @@ const Ui = struct {
                     },
                     'a' => {
                         state.mode = .Insert;
-                        state.snap.cursor += 1;
+                        if (state.snap.cursor < state.snap.length) {
+                            state.snap.cursor += 1;
+                        }
                         state.snap.updateOffsetRight(box.width);
                     },
 
                     'I' => {
                         state.mode = .Insert;
-                        state.snap.cursor = state.snap.firstNonwhitespaceCharacter();
+                        state.snap.cursor = state.snap.firstNonwhitespaceIndex();
                         state.snap.updateOffsetLeft();
                     },
                     'A' => {
@@ -229,7 +299,7 @@ const Ui = struct {
                     },
 
                     '^', '_' => {
-                        state.snap.cursor = state.snap.firstNonwhitespaceCharacter();
+                        state.snap.cursor = state.snap.firstNonwhitespaceIndex();
                         state.snap.updateOffsetLeft();
                     },
                     '0' => {
@@ -242,16 +312,18 @@ const Ui = struct {
                     },
 
                     'h', keys.ARROW_LEFT => {
-                        if (state.snap.cursor > 0) {
-                            state.snap.cursor -= 1;
+                        if (state.snap.moveLeft()) {
                             state.snap.updateOffsetLeft();
                         }
                     },
                     'l', keys.ARROW_RIGHT => {
-                        if (state.snap.cursor + 1 < state.snap.length) {
-                            state.snap.cursor += 1;
+                        if (state.snap.moveRight()) {
                             state.snap.updateOffsetRight(box.width);
                         }
+                    },
+
+                    'D' => {
+                        state.snap.deleteRight();
                     },
 
                     // TODO: v
@@ -262,8 +334,6 @@ const Ui = struct {
                     // TODO: W
                     // TODO: E
                     // TODO: B
-                    // TODO: D
-                    // TODO: 0
                     // TODO: u
                     // TODO: <C-r>
 
@@ -285,38 +355,24 @@ const Ui = struct {
                     },
 
                     keys.BACKSPACE => {
-                        if (state.snap.cursor > 0 and state.snap.length > 0) {
-                            for (state.snap.cursor..state.snap.length) |i| {
-                                state.snap.buffer[i - 1] = state.snap.buffer[i];
-                            }
-                            state.snap.cursor -= 1;
-                            state.snap.length -= 1;
+                        if (state.snap.backspace()) {
                             state.snap.updateOffsetLeft();
                         }
                     },
 
                     keys.ARROW_LEFT => {
-                        if (state.snap.cursor > 0) {
-                            state.snap.cursor -= 1;
+                        if (state.snap.moveLeft()) {
                             state.snap.updateOffsetLeft();
                         }
                     },
                     keys.ARROW_RIGHT => {
-                        if (state.snap.cursor < state.snap.length) {
-                            state.snap.cursor += 1;
+                        if (state.snap.moveRight()) {
                             state.snap.updateOffsetRight(box.width);
                         }
                     },
 
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        if (state.snap.length < MAX_INPUT) {
-                            var i = state.snap.length;
-                            while (i > state.snap.cursor) : (i -= 1) {
-                                state.snap.buffer[i] = state.snap.buffer[i - 1];
-                            }
-                            state.snap.buffer[state.snap.cursor] = @intCast(key);
-                            state.snap.cursor += 1;
-                            state.snap.length += 1;
+                        if (state.snap.insertChar(@intCast(key))) {
                             state.snap.updateOffsetRight(box.width);
                         }
                     },
@@ -328,7 +384,7 @@ const Ui = struct {
             .Replace => {
                 switch (key) {
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        state.snap.buffer[state.snap.cursor] = @intCast(key);
+                        self.snap.replaceChar(@intCast(key));
                         state.mode = .Normal;
                     },
 
