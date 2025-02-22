@@ -52,21 +52,20 @@ pub fn main() !void {
         },
     };
 
-    const ui = try Ui.init();
-    defer ui.deinit();
+    const window = try ui.init();
 
     { // Temporary
         const buffer = "abcdef ghijkl mnopqr stuvwx yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
         @memcpy(state.snap.buffer[0..buffer.len], buffer);
         state.snap.length = buffer.len;
         state.snap.cursor = buffer.len - 1;
-        const size = try ui.window.getScreenSize();
+        const size = try window.getScreenSize();
         box.update(size);
         state.snap.updateOffsetInitial();
     }
 
     while (true) {
-        ui.frame(&state) catch |err| switch (err) {
+        ui.render(window, &state) catch |err| switch (err) {
             error.Exit => break,
             else => return err,
         };
@@ -78,7 +77,7 @@ const State = struct {
     snap: Snap,
 
     fn exit(self: *const State, save_result: bool) !void {
-        try curses.endwin();
+        try ui.deinit();
         if (save_result) {
             self.saveResult();
         }
@@ -367,52 +366,48 @@ const Snap = struct {
     }
 };
 
-const Ui = struct {
-    window: Window,
-
-    fn init() !Ui {
+const ui = struct {
+    fn init() !Window {
         const window = try curses.initscr();
 
         try curses.noecho();
         try window.keypad(true);
         try curses.set_escdelay(0);
 
-        return Ui{
-            .window = window,
-        };
+        return window;
     }
 
-    fn deinit(self: *const Ui) void {
-        _ = self;
-        curses.endwin() catch {};
+    fn deinit() !void {
+        try curses.endwin();
     }
 
-    fn frame(self: *const Ui, state: *State) !void {
-        const size = try self.window.getScreenSize();
+    fn render(window: Window, state: *State) !void {
+        const size = try window.getScreenSize();
         box.update(size);
 
-        try self.window.clear();
+        try window.clear();
 
-        try self.drawModeName(state, size);
+        try ui.drawModeName(window, state, size);
 
-        try self.drawBox(
+        try ui.drawBox(
+            window,
             state.snap.offset > 0,
             state.snap.offset + box.width < state.snap.length,
         );
 
-        try self.drawText(state);
+        try ui.drawText(window, state);
 
-        try Ui.setCursor(state.mode);
+        try ui.setCursor(state.mode);
 
-        try self.setCursorPosition(&state.snap);
+        try ui.setCursorPosition(window, &state.snap);
 
         // TODO: Move somewhere else
-        const key = try self.window.getch();
+        const key = try window.getch();
         try state.handleKey(key);
     }
 
-    fn drawModeName(self: *const Ui, state: *const State, size: ScreenSize) !void {
-        try self.window.move(size.rows - 1, 1);
+    fn drawModeName(window: Window, state: *const State, size: ScreenSize) !void {
+        try window.move(size.rows - 1, 1);
 
         const mode = switch (state.mode) {
             VimMode.Normal => "NORMAL ",
@@ -420,12 +415,10 @@ const Ui = struct {
             VimMode.Replace => "REPLACE",
             VimMode.Visual => "VISUAL ",
         };
-        try self.window.addstr(mode);
+        try window.addstr(mode);
     }
 
-    fn drawBox(self: *const Ui, left_open: bool, right_open: bool) !void {
-        const window = self.window;
-
+    fn drawBox(window: Window, left_open: bool, right_open: bool) !void {
         try window.move(box.y, box.x);
         try window.addch(acs.ULCORNER);
         for (0..box.width) |_| {
@@ -446,15 +439,15 @@ const Ui = struct {
         try window.addch(acs.LRCORNER);
     }
 
-    fn drawText(self: *const Ui, state: *const State) !void {
-        try self.window.move(box.y + 1, box.x + 1);
+    fn drawText(window: Window, state: *const State) !void {
+        try window.move(box.y + 1, box.x + 1);
 
         for (0..box.width) |i| {
             const index = i + state.snap.offset;
             if (index >= state.snap.length) {
                 break;
             }
-            try self.window.addch(state.snap.buffer[index]);
+            try window.addch(state.snap.buffer[index]);
         }
     }
 
@@ -467,14 +460,14 @@ const Ui = struct {
         curses.setCursor(style);
     }
 
-    fn setCursorPosition(self: *const Ui, snap: *const Snap) !void {
+    fn setCursorPosition(window: Window, snap: *const Snap) !void {
         const cursor_x: u16 = @intCast(
             box.x + min(
                 @as(u32, box.width),
                 subsat(snap.cursor, snap.offset),
             ) + 1,
         );
-        try self.window.move(box.y + 1, cursor_x);
+        try window.move(box.y + 1, cursor_x);
     }
 };
 
