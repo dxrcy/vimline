@@ -382,63 +382,48 @@ const Ui = struct {
         };
     }
 
-    fn deinit(self: Ui) void {
+    fn deinit(self: *const Ui) void {
         _ = self;
         curses.endwin() catch {};
     }
 
-    fn frame(self: Ui, state: *State) !void {
-        const window = self.window;
-
-        const size = try window.getScreenSize();
+    fn frame(self: *const Ui, state: *State) !void {
+        const size = try self.window.getScreenSize();
         box.update(size);
 
-        try window.clear();
+        try self.window.clear();
 
-        try window.move(size.rows - 1, 1);
-        const mode = switch (state.mode) {
-            VimMode.Normal => "NORMAL ",
-            VimMode.Insert => "INSERT ",
-            VimMode.Replace => "REPLACE",
-            VimMode.Visual => "VISUAL ",
-        };
-        try window.addstr(mode);
+        try self.drawModeName(state, size);
 
         try self.drawBox(
             state.snap.offset > 0,
             state.snap.offset + box.width < state.snap.length,
         );
 
-        try window.move(box.y + 1, box.x + 1);
-        for (0..box.width) |i| {
-            const index = i + state.snap.offset;
-            if (index >= state.snap.length) {
-                break;
-            }
-            try window.addch(state.snap.buffer[index]);
-        }
+        try self.drawText(state);
 
-        if (state.mode == .Insert) {
-            curses.setCursor(.SteadyBar);
-        } else if (state.mode == .Replace) {
-            curses.setCursor(.SteadyUnderline);
-        } else {
-            curses.setCursor(.SteadyBlock);
-        }
+        try Ui.setCursor(state.mode);
 
-        const cursor_x: u16 = @intCast(
-            box.x + min(
-                @as(u32, box.width),
-                subsat(state.snap.cursor, state.snap.offset),
-            ) + 1,
-        );
-        try window.move(box.y + 1, cursor_x);
+        try self.setCursorPosition(&state.snap);
 
-        const key = try window.getch();
+        // TODO: Move somewhere else
+        const key = try self.window.getch();
         try state.handleKey(key);
     }
 
-    fn drawBox(self: Ui, left_open: bool, right_open: bool) !void {
+    fn drawModeName(self: *const Ui, state: *const State, size: ScreenSize) !void {
+        try self.window.move(size.rows - 1, 1);
+
+        const mode = switch (state.mode) {
+            VimMode.Normal => "NORMAL ",
+            VimMode.Insert => "INSERT ",
+            VimMode.Replace => "REPLACE",
+            VimMode.Visual => "VISUAL ",
+        };
+        try self.window.addstr(mode);
+    }
+
+    fn drawBox(self: *const Ui, left_open: bool, right_open: bool) !void {
         const window = self.window;
 
         try window.move(box.y, box.x);
@@ -459,6 +444,37 @@ const Ui = struct {
             try window.addch(acs.HLINE);
         }
         try window.addch(acs.LRCORNER);
+    }
+
+    fn drawText(self: *const Ui, state: *const State) !void {
+        try self.window.move(box.y + 1, box.x + 1);
+
+        for (0..box.width) |i| {
+            const index = i + state.snap.offset;
+            if (index >= state.snap.length) {
+                break;
+            }
+            try self.window.addch(state.snap.buffer[index]);
+        }
+    }
+
+    fn setCursor(mode: VimMode) !void {
+        const style: curses.CursorStyle = switch (mode) {
+            .Insert => .SteadyBar,
+            .Replace => .SteadyUnderline,
+            else => .SteadyBlock,
+        };
+        curses.setCursor(style);
+    }
+
+    fn setCursorPosition(self: *const Ui, snap: *const Snap) !void {
+        const cursor_x: u16 = @intCast(
+            box.x + min(
+                @as(u32, box.width),
+                subsat(snap.cursor, snap.offset),
+            ) + 1,
+        );
+        try self.window.move(box.y + 1, cursor_x);
     }
 };
 
