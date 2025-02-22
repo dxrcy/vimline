@@ -59,7 +59,7 @@ pub fn main() !void {
         state.snap.cursor = buffer.len - 1;
         const size = try ui.window.getScreenSize();
         box.update(size);
-        state.snap.offset = subsat(state.snap.cursor + box_padding.RIGHT_EMPTY + 1, box.width);
+        state.snap.updateOffsetInitial();
     }
 
     while (true) {
@@ -113,6 +113,10 @@ const Snap = struct {
         if (self.cursor + padding_right > self.offset + width) {
             self.offset = subsat(self.cursor + padding_right, width);
         }
+    }
+
+    fn updateOffsetInitial(self: *Snap) void {
+        self.offset = subsat(self.cursor + box_padding.RIGHT_EMPTY + 1, box.width);
     }
 
     fn firstNonwhitespaceIndex(self: *const Snap) u32 {
@@ -174,8 +178,11 @@ const Snap = struct {
     }
 
     fn deleteRight(self: *Snap) void {
+        if (self.length < self.cursor) {
+            return;
+        }
         self.length = self.cursor;
-        if (self.length > 0) {
+        if (self.cursor > 0) {
             self.cursor -= 1;
         }
     }
@@ -184,9 +191,7 @@ const Snap = struct {
         if (self.cursor == 0) {
             return;
         }
-
         self.cursor -= 1;
-
         self.updateOffsetLeft();
     }
 
@@ -194,9 +199,35 @@ const Snap = struct {
         if (self.cursor + 1 >= self.length) {
             return;
         }
-
         self.cursor += 1;
+        self.updateOffsetRight();
+    }
 
+    fn moveRight2(self: *Snap) void {
+        if (self.cursor >= self.length) {
+            return;
+        }
+        self.cursor += 1;
+        self.updateOffsetRight();
+    }
+
+    fn moveToStart(self: *Snap) void {
+        self.cursor = 0;
+        self.updateOffsetLeft();
+    }
+
+    fn moveToStart2(self: *Snap) void {
+        self.cursor = self.firstNonwhitespaceIndex();
+        self.updateOffsetLeft();
+    }
+
+    fn moveToEnd(self: *Snap) void {
+        self.cursor = subsat(self.length, 1);
+        self.updateOffsetRight();
+    }
+
+    fn moveToEnd2(self: *Snap) void {
+        self.cursor = self.length;
         self.updateOffsetRight();
     }
 };
@@ -296,34 +327,26 @@ const Ui = struct {
                     },
                     'a' => {
                         state.mode = .Insert;
-                        if (state.snap.cursor < state.snap.length) {
-                            state.snap.cursor += 1;
-                        }
-                        state.snap.updateOffsetRight();
+                        state.snap.moveRight2();
                     },
 
                     'I' => {
                         state.mode = .Insert;
-                        state.snap.cursor = state.snap.firstNonwhitespaceIndex();
-                        state.snap.updateOffsetLeft();
+                        state.snap.moveToStart2();
                     },
                     'A' => {
                         state.mode = .Insert;
-                        state.snap.cursor = state.snap.length;
-                        state.snap.updateOffsetRight();
+                        state.snap.moveToEnd2();
                     },
 
                     '^', '_' => {
-                        state.snap.cursor = state.snap.firstNonwhitespaceIndex();
-                        state.snap.updateOffsetLeft();
+                        state.snap.moveToStart2();
                     },
                     '0' => {
-                        state.snap.cursor = 0;
-                        state.snap.updateOffsetLeft();
+                        state.snap.moveToStart();
                     },
                     '$' => {
-                        state.snap.cursor = state.snap.length - 1;
-                        state.snap.updateOffsetRight();
+                        state.snap.moveToEnd();
                     },
 
                     'h', keys.ARROW_LEFT => {
@@ -387,8 +410,8 @@ const Ui = struct {
             .Replace => {
                 switch (key) {
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
-                        state.snap.replaceChar(@intCast(key));
                         state.mode = .Normal;
+                        state.snap.replaceChar(@intCast(key));
                     },
 
                     else => {
