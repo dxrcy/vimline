@@ -4,8 +4,6 @@ pub const c = @cImport({
     @cInclude("curses.h");
 });
 
-const Error = error.CursesError;
-
 pub const Key = c_uint;
 
 pub const ScreenSize = struct {
@@ -15,7 +13,7 @@ pub const ScreenSize = struct {
 
 fn asError(res: c_int) !c_int {
     if (res == c.ERR) {
-        return Error;
+        return error.CursesError;
     }
     return res;
 }
@@ -63,7 +61,7 @@ pub const Window = struct {
 
 pub fn initscr() !Window {
     return Window{
-        .window = c.initscr() orelse return Error,
+        .window = c.initscr() orelse return error.CursesError,
     };
 }
 

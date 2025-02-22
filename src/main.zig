@@ -64,7 +64,10 @@ pub fn main() !void {
     }
 
     while (true) {
-        try ui.frame(&state);
+        ui.frame(&state) catch |err| switch (err) {
+            error.Exit => break,
+            else => return err,
+        };
     }
 }
 
@@ -77,7 +80,7 @@ const State = struct {
         if (save_result) {
             self.saveResult();
         }
-        std.process.exit(0);
+        return error.Exit;
     }
 
     fn saveResult(self: *const State) void {
