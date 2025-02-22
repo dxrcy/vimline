@@ -1,6 +1,0 @@
-[submodule "extern/zig-spoon"]
-	path = extern/zig-spoon
-	url = https://github.com/kristoff-it/zig-spoon
-[submodule "src/zig-spoon"]
-	path = src/zig-spoon
-	url = https://github.com/kristoff-it/zig-spoon
