@@ -1,5 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const isWhitespace = std.ascii.isWhitespace;
+const isAlphanumeric = std.ascii.isAlphanumeric;
 
 const lib = @import("lib.zig");
 
@@ -74,7 +76,7 @@ pub fn main() !void {
     const window = try ui.init();
 
     { // Temporary
-        const buffer = "abcdef ghijkl mnopqr stuvwx yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
+        const buffer = "abcdef ++ ghijkl.. mno===pqr stu4v+wix yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
         @memcpy(state.snap.buffer[0..buffer.len], buffer);
         state.snap.length = buffer.len;
         state.snap.cursor = buffer.len - 1;
@@ -176,6 +178,11 @@ const State = struct {
                     'D' => {
                         self.snap.deleteToEnd();
                     },
+                    'C' => {
+                        self.mode = .Insert;
+                        self.snap.deleteToEnd();
+                        self.snap.moveRightInsert();
+                    },
 
                     'x' => {
                         self.snap.removeNextChar();
@@ -198,14 +205,30 @@ const State = struct {
                         self.snap.moveRight();
                     },
 
-                    // TODO: w
-                    // TODO: e
-                    // TODO: b
-                    // TODO: W
-                    // TODO: E
-                    // TODO: B
+                    'w' => {
+                        self.snap.moveToWordStart(false);
+                    },
+                    'W' => {
+                        self.snap.moveToWordStart(true);
+                    },
+                    'e' => {
+                        self.snap.moveToWordEnd(false);
+                    },
+                    'E' => {
+                        self.snap.moveToWordEnd(true);
+                    },
+                    'b' => {
+                        self.snap.moveToWordBack(false);
+                    },
+                    'B' => {
+                        self.snap.moveToWordBack(true);
+                    },
+
                     // TODO: u
                     // TODO: <C-r>
+
+                    // TODO: f
+                    // TODO: F
 
                     else => {},
                 }
@@ -218,8 +241,12 @@ const State = struct {
                     },
 
                     'd', 'x' => {
-                        self.snap.removeBetween(self.visual_start);
                         self.mode = .Normal;
+                        self.snap.removeBetween(self.visual_start);
+                    },
+                    'c' => {
+                        self.mode = .Insert;
+                        self.snap.removeBetween(self.visual_start);
                     },
 
                     '^', '_' => {
@@ -239,7 +266,28 @@ const State = struct {
                         self.snap.moveRight();
                     },
 
+                    'w' => {
+                        self.snap.moveToWordStart(false);
+                    },
+                    'W' => {
+                        self.snap.moveToWordStart(true);
+                    },
+                    'e' => {
+                        self.snap.moveToWordEnd(false);
+                    },
+                    'E' => {
+                        self.snap.moveToWordEnd(true);
+                    },
+                    'b' => {
+                        self.snap.moveToWordBack(false);
+                    },
+                    'B' => {
+                        self.snap.moveToWordBack(true);
+                    },
+
                     // TODO: r
+                    // TODO: u
+                    // TODO: U
 
                     else => {},
                 }
@@ -322,7 +370,7 @@ const Snap = struct {
 
     fn firstNonspaceIndex(self: *const Snap) u32 {
         var i: u32 = 0;
-        while (std.ascii.isWhitespace(self.buffer[i])) {
+        while (isWhitespace(self.buffer[i])) {
             i += 1;
         }
         return i;
@@ -448,6 +496,140 @@ const Snap = struct {
     fn moveToEndInsert(self: *Snap) void {
         self.cursor = self.length;
         self.updateOffsetRight();
+    }
+
+    fn moveToWordStart(self: *Snap, full_word: bool) void {
+        self.cursor = self.findWordStart(full_word);
+        self.updateOffsetRight();
+    }
+
+    fn moveToWordEnd(self: *Snap, full_word: bool) void {
+        self.cursor = self.findWordEnd(full_word);
+        self.updateOffsetRight();
+    }
+
+    fn moveToWordBack(self: *Snap, full_word: bool) void {
+        self.cursor = self.findWordBack(full_word);
+        self.updateOffsetLeft();
+    }
+
+    fn findWordStart(self: *const Snap, full_word: bool) u32 {
+        var cursor = self.cursor;
+
+        // Empty line
+        if (self.length < 1) {
+            return 0;
+        }
+        // At end of line
+        if (cursor + 1 >= self.length) {
+            return self.length - 1;
+        }
+        // On a space
+        // Look for first non-space character
+        if (isWhitespace(self.buffer[cursor])) {
+            while (cursor + 1 < self.length) {
+                cursor += 1;
+                if (!isWhitespace(self.buffer[cursor])) {
+                    return cursor;
+                }
+            }
+        }
+        // On non-space
+        const alnum = isAlphanumeric(self.buffer[cursor]);
+        while (cursor < self.length - 1) {
+            cursor += 1;
+            // Space found
+            // Look for first non-space character
+            if (isWhitespace(self.buffer[cursor])) {
+                while (cursor + 1 < self.length) {
+                    cursor += 1;
+                    if (!isWhitespace(self.buffer[cursor])) {
+                        return cursor;
+                    }
+                }
+                break;
+            }
+            // First punctuation after word
+            // OR first word after punctuation
+            // (If distinguishing words and punctuation)
+            if (!full_word and isAlphanumeric(self.buffer[cursor]) != alnum) {
+                return cursor;
+            }
+        }
+        // No next word found
+        // Go to end of line
+        return self.length - 1;
+    }
+
+    fn findWordEnd(snap: *const Snap, full_word: bool) u32 {
+        var cursor = snap.cursor;
+
+        // Empty line
+        if (snap.length < 1) {
+            return 0;
+        }
+        // At end of line
+        if (cursor + 1 >= snap.length) {
+            return snap.length - 1;
+        }
+        cursor += 1; // Always move at least one character
+        // On a sequence of spaces (>=1)
+        // Look for start of next word, start from there instead
+        while (cursor + 1 < snap.length and isWhitespace(snap.buffer[cursor])) {
+            cursor += 1;
+        }
+        // On non-space
+        const alnum = isAlphanumeric(snap.buffer[cursor]);
+        while (cursor < snap.length) {
+            cursor += 1;
+            // Space found
+            // Word ends at previous index
+            // OR first punctuation after word
+            // OR first word after punctuation
+            // (If distinguishing words and punctuation)
+            if (isWhitespace(snap.buffer[cursor]) or
+                (!full_word and isAlphanumeric(snap.buffer[cursor]) != alnum))
+            {
+                return cursor - 1;
+            }
+        }
+        // No next word found
+        // Go to end of line
+        return snap.length - 1;
+    }
+
+    fn findWordBack(self: *const Snap, full_word: bool) u32 {
+        var cursor = self.cursor;
+
+        // At start of line
+        if (cursor <= 1) {
+            return 0;
+        }
+        // Start at previous character
+        cursor -= 1;
+        // On a sequence of spaces (>=1)
+        // Look for end of previous word, start from there instead
+        while (cursor > 0 and isWhitespace(self.buffer[cursor])) {
+            cursor -= 1;
+        }
+        // Now on a non-space
+        const alnum = isAlphanumeric(self.buffer[cursor]);
+        while (cursor > 0) {
+            cursor -= 1;
+            // Space found
+            // OR first punctuation before word
+            // OR first word before punctuation
+            // Word starts at next index
+            // (If distinguishing words and punctuation)
+            if (isWhitespace(self.buffer[cursor]) or
+                (!full_word and isAlphanumeric(self.buffer[cursor]) != alnum))
+            {
+                return cursor + 1;
+            }
+        }
+        // No previous word found
+        // Go to start of line
+        return 0;
     }
 };
 
