@@ -12,6 +12,7 @@ const Window = curses.Window;
 const Key = curses.Key;
 
 const MAX_INPUT = 200;
+const MAX_HISTORY = 5;
 
 const box_size = struct {
     const MAX_WIDTH = 70;
@@ -71,6 +72,11 @@ pub fn main() !void {
             .cursor = 0,
             .offset = 0,
         },
+        .history = History{
+            .snaps = undefined,
+            .length = 0,
+            .index = 0,
+        },
     };
 
     const window = try ui.init();
@@ -106,6 +112,7 @@ const State = struct {
     mode: VimMode,
     visual_start: u32,
     snap: Snap,
+    history: History,
 
     fn exit(self: *const State, save_result: bool) !void {
         try ui.deinit();
@@ -337,6 +344,12 @@ const State = struct {
             },
         }
     }
+};
+
+const History = struct {
+    snaps: [MAX_HISTORY]Snap,
+    length: u32,
+    index: u32,
 };
 
 const Snap = struct {
@@ -681,6 +694,8 @@ const ui = struct {
             VimMode.Replace => "REPLACE",
         };
         try window.addstr(mode);
+
+        try window.addstr(" ");
     }
 
     fn drawBox(window: Window, left_open: bool, right_open: bool) !void {
