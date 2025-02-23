@@ -1,9 +1,9 @@
 const std = @import("std");
 const print = std.debug.print;
 
-const lib = @import("./lib.zig");
+const lib = @import("lib.zig");
 
-const curses = @import("./curses.zig");
+const curses = @import("curses.zig");
 const acs = curses.acs;
 const ScreenSize = curses.ScreenSize;
 const Window = curses.Window;
