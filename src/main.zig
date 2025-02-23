@@ -11,6 +11,8 @@ const ScreenSize = curses.ScreenSize;
 const Window = curses.Window;
 const Key = curses.Key;
 
+// TODO(refactor): Move structs to proper files
+
 const MAX_INPUT = 200;
 const MAX_HISTORY = 5;
 
@@ -35,6 +37,10 @@ const keys = struct {
 
     const PRINTABLE_START = 0x20;
     const PRINTABLE_END = 0x7e;
+
+    fn ctrl(comptime key: anytype) @TypeOf(key) {
+        return key - 0x60;
+    }
 };
 
 const VimMode = enum {
@@ -63,33 +69,28 @@ const Pair = enum(c_short) {
 };
 
 pub fn main() !void {
+    // TODO(feat): Read from cli argument
+    var snap: Snap = undefined;
+    const buffer = "abcdef ghijkl mnopqr stuvwx";
+    @memcpy(snap.buffer[0..buffer.len], buffer);
+    snap.length = buffer.len;
+    snap.cursor = buffer.len - 1;
+
+    const history = History.from(&snap);
+
     var state = State{
         .mode = .Normal,
         .visual_start = 0,
-        .snap = Snap{
-            .buffer = undefined,
-            .length = 0,
-            .cursor = 0,
-            .offset = 0,
-        },
-        .history = History{
-            .snaps = undefined,
-            .length = 0,
-            .index = 0,
-        },
+        .snap = snap,
+        .history = history,
     };
 
     const window = try ui.init();
 
-    { // Temporary
-        const buffer = "abcdef ++ ghijkl.. mno===pqr stu4v+wix yz12345 67890 ABCDEF GHIJKL MNOPQR STUVWX YZ12345 67890";
-        @memcpy(state.snap.buffer[0..buffer.len], buffer);
-        state.snap.length = buffer.len;
-        state.snap.cursor = buffer.len - 1;
-        const size = try window.getScreenSize();
-        box.update(size);
-        state.snap.updateOffsetInitial();
-    }
+    // TODO(refactor)
+    const size = try window.getScreenSize();
+    box.update(size);
+    state.snap.updateOffsetInitial();
 
     try curses.start_color();
     try curses.use_default_colors();
@@ -184,15 +185,18 @@ const State = struct {
 
                     'D' => {
                         self.snap.deleteToEnd();
+                        self.history.push(&self.snap);
                     },
                     'C' => {
                         self.mode = .Insert;
                         self.snap.deleteToEnd();
                         self.snap.moveRightInsert();
+                        self.history.push(&self.snap);
                     },
 
                     'x' => {
                         self.snap.removeNextChar();
+                        self.history.push(&self.snap);
                     },
 
                     '^', '_' => {
@@ -231,8 +235,13 @@ const State = struct {
                         self.snap.moveToWordBack(true);
                     },
 
-                    // TODO: u
-                    // TODO: <C-r>
+                    'u' => {
+                        self.history.undo(&self.snap);
+                    },
+
+                    keys.ctrl('r') => {
+                        self.history.redo(&self.snap);
+                    },
 
                     // TODO: f
                     // TODO: F
@@ -250,10 +259,12 @@ const State = struct {
                     'd', 'x' => {
                         self.mode = .Normal;
                         self.snap.removeBetween(self.visual_start);
+                        self.history.push(&self.snap);
                     },
                     'c' => {
                         self.mode = .Insert;
                         self.snap.removeBetween(self.visual_start);
+                        self.history.push(&self.snap);
                     },
 
                     '^', '_' => {
@@ -305,6 +316,7 @@ const State = struct {
                     keys.ESCAPE => {
                         self.mode = .Normal;
                         self.snap.moveLeft();
+                        self.history.push(&self.snap);
                     },
 
                     keys.RETURN => {
@@ -335,6 +347,7 @@ const State = struct {
                     keys.PRINTABLE_START...keys.PRINTABLE_END => {
                         self.mode = .Normal;
                         self.snap.replaceChar(@intCast(key));
+                        self.history.push(&self.snap);
                     },
 
                     else => {
@@ -347,9 +360,54 @@ const State = struct {
 };
 
 const History = struct {
+    // TODO(opt): Use ring buffer
     snaps: [MAX_HISTORY]Snap,
     length: u32,
     index: u32,
+
+    fn from(snap: *const Snap) History {
+        var self = History{
+            .snaps = undefined,
+            .length = 1,
+            .index = 0,
+        };
+        self.snaps[0].copyFrom(snap);
+        return self;
+    }
+
+    fn push(self: *History, snap: *const Snap) void {
+        // Skip if new snap is same as last
+        if (snap.eq(&self.snaps[self.index])) {
+            return;
+        }
+
+        if (self.index + 1 >= MAX_HISTORY) {
+            for (0..self.index) |i| {
+                self.snaps[i].copyFrom(&self.snaps[i + 1]);
+            }
+        } else {
+            self.index += 1;
+        }
+
+        self.snaps[self.index].copyFrom(snap);
+        self.length = self.index + 1;
+    }
+
+    fn undo(self: *History, snap: *Snap) void {
+        if (self.length <= 1 or self.index < 1) {
+            return;
+        }
+        self.index -= 1;
+        snap.copyFrom(&self.snaps[self.index]);
+    }
+
+    fn redo(self: *History, snap: *Snap) void {
+        if (self.index + 1 >= self.length) {
+            return;
+        }
+        self.index += 1;
+        snap.copyFrom(&self.snaps[self.index]);
+    }
 };
 
 const Snap = struct {
@@ -357,6 +415,25 @@ const Snap = struct {
     length: u32,
     cursor: u32,
     offset: u32,
+
+    fn eq(self: *const Snap, other: *const Snap) bool {
+        if (self.length != other.length) {
+            return false;
+        }
+        for (0..self.length) |i| {
+            if (self.buffer[i] != other.buffer[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn copyFrom(self: *Snap, other: *const Snap) void {
+        self.length = other.length;
+        self.cursor = other.cursor;
+        self.offset = other.offset;
+        @memcpy(&self.buffer, &other.buffer);
+    }
 
     fn updateOffsetLeft(self: *Snap) void {
         if (self.cursor < self.offset + box_padding.LEFT) {
@@ -680,6 +757,22 @@ const ui = struct {
         );
         try ui.drawText(window, state);
 
+        for (0..state.history.length) |i| {
+            const y = i + box.y + 4;
+            try window.move(@intCast(y), 0);
+
+            if (i == state.history.index) {
+                try window.print(" > ", .{});
+            } else {
+                try window.print("   ", .{});
+            }
+
+            const snap = state.history.snaps[i];
+            for (0..snap.length) |j| {
+                try window.addch(snap.buffer[j]);
+            }
+        }
+
         try ui.setCursor(state.mode);
         try ui.setCursorPosition(window, &state.snap);
     }
@@ -693,9 +786,13 @@ const ui = struct {
             VimMode.Insert => "INSERT ",
             VimMode.Replace => "REPLACE",
         };
-        try window.addstr(mode);
 
-        try window.addstr(" ");
+        try window.attr_set(.Dim, Pair.Text);
+        try window.print("{s} [{:03} /{:03}]", .{
+            mode,
+            state.history.index + 1,
+            state.history.length,
+        });
     }
 
     fn drawBox(window: Window, left_open: bool, right_open: bool) !void {

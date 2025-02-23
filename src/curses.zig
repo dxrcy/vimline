@@ -1,6 +1,8 @@
 const std = @import("std");
 const lib = @import("lib.zig");
 
+const io = std.io;
+
 pub const c = @cImport({
     @cInclude("curses.h");
 });
@@ -22,6 +24,19 @@ fn asError(result: c_int) !c_int {
 pub const Window = struct {
     window: *c.WINDOW,
 
+    pub const Writer = io.Writer(Window, error{CursesError}, Window.write);
+
+    pub fn writer(self: Window) Writer {
+        return .{ .context = self };
+    }
+
+    fn write(self: Window, bytes: []const u8) !usize {
+        for (0..bytes.len) |i| {
+            try self.addch(bytes[i]);
+        }
+        return bytes.len;
+    }
+
     pub fn clear(self: Window) !void {
         _ = try asError(c.wclear(self.window));
     }
@@ -39,9 +54,11 @@ pub const Window = struct {
     }
 
     pub fn addstr(self: Window, string: []const u8) !void {
-        for (0..string.len) |i| {
-            try self.addch(string[i]);
-        }
+        _ = try self.writer().write(string);
+    }
+
+    pub fn print(self: Window, comptime format: []const u8, args: anytype) !void {
+        _ = try self.writer().print(format, args);
     }
 
     pub fn keypad(self: Window, value: bool) !void {
@@ -104,7 +121,7 @@ pub const acs = struct {
 
 pub const Attr = enum(c_uint) {
     Normal = c.A_NORMAL,
-    Dim= c.A_DIM,
+    Dim = c.A_DIM,
 };
 
 pub const color = struct {
