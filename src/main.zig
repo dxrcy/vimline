@@ -384,6 +384,7 @@ const Snap = struct {
         for (self.cursor + 1..self.length) |i| {
             self.buffer[i - 1] = self.buffer[i];
         }
+
         self.length -= 1;
         if (self.cursor >= self.length and self.cursor > 0) {
             self.cursor -= 1;
@@ -409,7 +410,7 @@ const Snap = struct {
 
     fn removeBetween(self: *Snap, start: u32) void {
         const left, var right = order(self.cursor, start);
-        right += 1;
+        right += 1; // Include right character
 
         const size = right - left;
 
@@ -435,6 +436,7 @@ const Snap = struct {
         while (i > self.cursor) : (i -= 1) {
             self.buffer[i] = self.buffer[i - 1];
         }
+
         self.buffer[self.cursor] = char;
         self.cursor += 1;
         self.length += 1;
@@ -707,19 +709,32 @@ const ui = struct {
     fn drawText(window: Window, state: *const State) !void {
         try window.move(box.y + 1, box.x + 1);
 
-        try window.attr_set(.Normal, Pair.Text);
+        const left, var right = order(state.snap.cursor, state.visual_start);
+        right += 1; // Include right character
+
+        // Don't set attribute here if it will be overridden in first loop iteration
+        if (state.mode == .Visual and left == 0) {
+            try window.attr_set(.Normal, Pair.Visual);
+        } else {
+            try window.attr_set(.Normal, Pair.Text);
+        }
 
         for (0..box.width) |i| {
             const index = i + state.snap.offset;
             if (index >= state.snap.length) {
                 break;
             }
-            // TODO(opt): Reduce unnecessary curses calls
-            if (state.mode == .Visual and state.selectContains(index)) {
-                try window.attr_set(.Normal, Pair.Visual);
+
+            // Change attributes at borders of visual selection
+            if (state.mode == .Visual) {
+                if (index == left) {
+                    try window.attr_set(.Normal, Pair.Visual);
+                } else if (index == right) {
+                    try window.attr_set(.Normal, Pair.Text);
+                }
             }
+
             try window.addch(state.snap.buffer[index]);
-            try window.attr_set(.Normal, Pair.Text);
         }
     }
 
