@@ -57,8 +57,13 @@ pub const Window = struct {
         };
     }
 
-    pub fn attr_set(self: Window, attrs: c.attr_t, pair: anytype) !void {
-        _ = try asError(c.wattr_set(self.window, attrs, @intFromEnum(pair), null));
+    pub fn attr_set(self: Window, attrs: Attr, pair: anytype) !void {
+        _ = try asError(c.wattr_set(
+            self.window,
+            @intFromEnum(attrs),
+            @intFromEnum(pair),
+            null,
+        ));
     }
 };
 
@@ -97,9 +102,9 @@ pub const acs = struct {
     pub const VLINE = 0x00400078;
 };
 
-pub const attr = struct {
-    pub const NORMAL = c.A_NORMAL;
-    pub const DIM = c.A_DIM;
+pub const Attr = enum(c_uint) {
+    Normal = c.A_NORMAL,
+    Dim= c.A_DIM,
 };
 
 pub const color = struct {

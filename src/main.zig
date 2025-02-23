@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 
 const lib = @import("lib.zig");
 
@@ -35,9 +36,9 @@ const keys = struct {
 
 const VimMode = enum {
     Normal,
+    Visual,
     Insert,
     Replace,
-    Visual,
 };
 
 const box = struct {
@@ -61,6 +62,7 @@ const Pair = enum(c_short) {
 pub fn main() !void {
     var state = State{
         .mode = .Normal,
+        .visual_start = 0,
         .snap = Snap{
             .buffer = undefined,
             .length = 0,
@@ -100,6 +102,7 @@ pub fn main() !void {
 
 const State = struct {
     mode: VimMode,
+    visual_start: u32,
     snap: Snap,
 
     fn exit(self: *const State, save_result: bool) !void {
@@ -115,6 +118,17 @@ const State = struct {
         lib.printStdout("{s}\n", .{text});
     }
 
+    fn selectContains(self: *const State, index: usize) bool {
+        // TODO(refactor): Use `order` ?
+        if (self.snap.cursor < self.visual_start) {
+            return index >= self.snap.cursor and index <= self.visual_start;
+        }
+        if (self.snap.cursor > self.visual_start) {
+            return index >= self.visual_start and index <= self.snap.cursor;
+        }
+        return index == self.visual_start;
+    }
+
     fn handleKey(self: *State, key: Key) !void {
         switch (self.mode) {
             .Normal => {
@@ -127,12 +141,15 @@ const State = struct {
                         try self.exit(true);
                     },
 
-                    'x' => {
-                        self.snap.removeNextChar();
+                    'v' => {
+                        self.mode = .Visual;
+                        self.visual_start = self.snap.cursor;
                     },
 
-                    'r' => {
-                        self.mode = .Replace;
+                    'V' => {
+                        self.mode = .Visual;
+                        self.visual_start = 0;
+                        self.snap.cursor = subsat(self.snap.length, 1);
                     },
 
                     'i' => {
@@ -152,6 +169,18 @@ const State = struct {
                         self.snap.moveToEndInsert();
                     },
 
+                    'r' => {
+                        self.mode = .Replace;
+                    },
+
+                    'D' => {
+                        self.snap.deleteToEnd();
+                    },
+
+                    'x' => {
+                        self.snap.removeNextChar();
+                    },
+
                     '^', '_' => {
                         self.snap.moveToFirstNonspace();
                     },
@@ -169,12 +198,6 @@ const State = struct {
                         self.snap.moveRight();
                     },
 
-                    'D' => {
-                        self.snap.deleteToEnd();
-                    },
-
-                    // TODO: v
-                    // TODO: V
                     // TODO: w
                     // TODO: e
                     // TODO: b
@@ -183,6 +206,40 @@ const State = struct {
                     // TODO: B
                     // TODO: u
                     // TODO: <C-r>
+
+                    else => {},
+                }
+            },
+
+            .Visual => {
+                switch (key) {
+                    keys.ESCAPE => {
+                        self.mode = .Normal;
+                    },
+
+                    'd', 'x' => {
+                        self.snap.removeBetween(self.visual_start);
+                        self.mode = .Normal;
+                    },
+
+                    '^', '_' => {
+                        self.snap.moveToFirstNonspace();
+                    },
+                    '0' => {
+                        self.snap.moveToStart();
+                    },
+                    '$' => {
+                        self.snap.moveToEnd();
+                    },
+
+                    'h', keys.ARROW_LEFT => {
+                        self.snap.moveLeft();
+                    },
+                    'l', keys.ARROW_RIGHT => {
+                        self.snap.moveRight();
+                    },
+
+                    // TODO: r
 
                     else => {},
                 }
@@ -229,10 +286,6 @@ const State = struct {
                         self.mode = .Normal;
                     },
                 }
-            },
-
-            .Visual => {
-                // TODO
             },
         }
     }
@@ -301,6 +354,24 @@ const Snap = struct {
         }
         self.length -= 1;
         self.cursor -= 1;
+
+        self.updateOffsetLeft();
+    }
+
+    fn removeBetween(self: *Snap, start: u32) void {
+        const left, var right = order(self.cursor, start);
+        right += 1;
+
+        const size = right - left;
+
+        for (right..self.length) |i| {
+            self.buffer[i - size] = self.buffer[i];
+        }
+        self.length -= size;
+
+        if (self.cursor >= self.length) {
+            self.cursor = subsat(self.length, 1);
+        }
 
         self.updateOffsetLeft();
     }
@@ -419,15 +490,15 @@ const ui = struct {
 
         const mode = switch (state.mode) {
             VimMode.Normal => "NORMAL ",
+            VimMode.Visual => "VISUAL ",
             VimMode.Insert => "INSERT ",
             VimMode.Replace => "REPLACE",
-            VimMode.Visual => "VISUAL ",
         };
         try window.addstr(mode);
     }
 
     fn drawBox(window: Window, left_open: bool, right_open: bool) !void {
-        try window.attr_set(curses.attr.DIM, Pair.Box);
+        try window.attr_set(.Dim, Pair.Box);
 
         try window.move(box.y, box.x);
         try window.addch(acs.ULCORNER);
@@ -452,14 +523,19 @@ const ui = struct {
     fn drawText(window: Window, state: *const State) !void {
         try window.move(box.y + 1, box.x + 1);
 
-        try window.attr_set(curses.attr.NORMAL, Pair.Text);
+        try window.attr_set(.Normal, Pair.Text);
 
         for (0..box.width) |i| {
             const index = i + state.snap.offset;
             if (index >= state.snap.length) {
                 break;
             }
+            // TODO(opt): Reduce unnecessary curses calls
+            if (state.mode == .Visual and state.selectContains(index)) {
+                try window.attr_set(.Normal, Pair.Visual);
+            }
             try window.addch(state.snap.buffer[index]);
+            try window.attr_set(.Normal, Pair.Text);
         }
     }
 
@@ -491,8 +567,15 @@ fn subsat(lhs: anytype, rhs: anytype) @TypeOf(lhs) {
 }
 
 fn min(lhs: anytype, rhs: @TypeOf(lhs)) @TypeOf(lhs) {
-    if (rhs < lhs) {
+    if (lhs > rhs) {
         return rhs;
     }
     return lhs;
+}
+
+fn order(lhs: anytype, rhs: @TypeOf(lhs)) struct { u32, u32 } {
+    if (lhs > rhs) {
+        return .{ rhs, lhs };
+    }
+    return .{ lhs, rhs };
 }
