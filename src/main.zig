@@ -1,5 +1,4 @@
 const std = @import("std");
-const print = std.debug.print;
 
 const lib = @import("lib.zig");
 
@@ -53,6 +52,12 @@ const box = struct {
     }
 };
 
+const Pair = enum(c_short) {
+    Text,
+    Box,
+    Visual,
+};
+
 pub fn main() !void {
     var state = State{
         .mode = .Normal,
@@ -75,6 +80,13 @@ pub fn main() !void {
         box.update(size);
         state.snap.updateOffsetInitial();
     }
+
+    try curses.start_color();
+    try curses.use_default_colors();
+
+    try curses.init_pair(Pair.Text, curses.color.WHITE, -1);
+    try curses.init_pair(Pair.Box, curses.color.BLUE, -1);
+    try curses.init_pair(Pair.Visual, -1, curses.color.BLUE);
 
     while (true) {
         try ui.render(window, &state);
@@ -415,6 +427,8 @@ const ui = struct {
     }
 
     fn drawBox(window: Window, left_open: bool, right_open: bool) !void {
+        try window.attr_set(curses.attr.DIM, Pair.Box);
+
         try window.move(box.y, box.x);
         try window.addch(acs.ULCORNER);
         for (0..box.width) |_| {
@@ -437,6 +451,8 @@ const ui = struct {
 
     fn drawText(window: Window, state: *const State) !void {
         try window.move(box.y + 1, box.x + 1);
+
+        try window.attr_set(curses.attr.NORMAL, Pair.Text);
 
         for (0..box.width) |i| {
             const index = i + state.snap.offset;

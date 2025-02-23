@@ -12,11 +12,11 @@ pub const ScreenSize = struct {
     cols: u16,
 };
 
-fn asError(res: c_int) !c_int {
-    if (res == c.ERR) {
+fn asError(result: c_int) !c_int {
+    if (result == c.ERR) {
         return error.CursesError;
     }
-    return res;
+    return result;
 }
 
 pub const Window = struct {
@@ -56,6 +56,10 @@ pub const Window = struct {
             .cols = @intCast(cols),
         };
     }
+
+    pub fn attr_set(self: Window, attrs: c.attr_t, pair: anytype) !void {
+        _ = try asError(c.wattr_set(self.window, attrs, @intFromEnum(pair), null));
+    }
 };
 
 pub fn initscr() !Window {
@@ -92,3 +96,25 @@ pub const acs = struct {
     pub const HLINE = 0x00400071;
     pub const VLINE = 0x00400078;
 };
+
+pub const attr = struct {
+    pub const NORMAL = c.A_NORMAL;
+    pub const DIM = c.A_DIM;
+};
+
+pub const color = struct {
+    pub const BLUE = c.COLOR_BLUE;
+    pub const WHITE = c.COLOR_WHITE;
+};
+
+pub fn start_color() !void {
+    _ = try asError(c.start_color());
+}
+
+pub fn use_default_colors() !void {
+    _ = try asError(c.use_default_colors());
+}
+
+pub fn init_pair(pair: anytype, fg: c_short, bg: c_short) !void {
+    _ = try asError(c.init_pair(@intFromEnum(pair), fg, bg));
+}
