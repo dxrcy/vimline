@@ -400,6 +400,7 @@ const Snap = struct {
         for (self.cursor..self.length) |i| {
             self.buffer[i - 1] = self.buffer[i];
         }
+
         self.length -= 1;
         self.cursor -= 1;
 
@@ -415,8 +416,9 @@ const Snap = struct {
         for (right..self.length) |i| {
             self.buffer[i - size] = self.buffer[i];
         }
-        self.length -= size;
 
+        self.length -= size;
+        self.cursor = left;
         if (self.cursor >= self.length) {
             self.cursor = subsat(self.length, 1);
         }
